@@ -5,12 +5,10 @@ namespace SanApi.Datos
 {
     public class AppDbContext : DbContext
     {
-        // El constructor recibe las opciones de configuración (cadena de conexión, provider, etc.)
         public AppDbContext(DbContextOptions<AppDbContext> options) : base(options)
         {
         }
 
-        // Definición de las tablas (DbSets)
         public DbSet<Usuario> Usuarios { get; set; }
         public DbSet<Sala> Salas { get; set; }
         public DbSet<ParticipanteSala> ParticipantesSala { get; set; }
@@ -21,7 +19,7 @@ namespace SanApi.Datos
         {
             base.OnModelCreating(modelBuilder);
 
-            // Ejemplo de configuración: Asegurar que el correo sea único
+            //  Asegurar que el correo sea único
             modelBuilder.Entity<Usuario>()
                 .HasIndex(u => u.Correo)
                 .IsUnique();

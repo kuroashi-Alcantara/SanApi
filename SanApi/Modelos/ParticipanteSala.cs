@@ -23,7 +23,7 @@ namespace SanApi.Modelos
         public virtual Sala Sala { get; set; } = null!;
 
         [ForeignKey("UsuarioId")]
-        // Aquí está el cambio: le decimos que NO haga cascada con el Usuario
+        
         [DeleteBehavior(DeleteBehavior.NoAction)]
         public virtual Usuario Usuario { get; set; } = null!;
     }
