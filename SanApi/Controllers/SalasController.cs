@@ -1,0 +1,165 @@
+﻿using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
+using SanApi.Datos;
+using SanApi.Dtos;
+using SanApi.Modelos; 
+using System.IdentityModel.Tokens.Jwt;
+using System.Security.Claims;
+
+namespace SanApi.Controllers
+{
+    [Authorize] // Protege TODOS los métodos de este controlador
+    [Route("api/[controller]")]
+    [ApiController]
+    public class SalasController : ControllerBase
+    {
+        private readonly AppDbContext _context;
+
+        public SalasController(AppDbContext context)
+        {
+            _context = context;
+        }
+
+        // POST: api/Salas
+        [HttpPost]
+        public async Task<IActionResult> CrearSala(SalaCrearDto dto)
+        {
+            // 1. MAGIA DEL JWT: Extraemos el ID del usuario logueado directamente del token
+            // .NET mapea el 'Sub' que configuramos en el Login a 'NameIdentifier'
+            var creadorIdString = User.FindFirst(ClaimTypes.NameIdentifier)?.Value
+                               ?? User.FindFirst(JwtRegisteredClaimNames.Sub)?.Value;
+
+            if (string.IsNullOrEmpty(creadorIdString) || !Guid.TryParse(creadorIdString, out Guid creadorId))
+            {
+                return Unauthorized("No se pudo identificar al usuario desde el token.");
+            }
+
+            // 2. Mapeo Manual: De DTO a Entidad
+            var nuevaSala = new Sala
+            {
+                // El Id se genera automáticamente por el Guid.NewGuid() de tu modelo
+                CreadorId = creadorId, // Asignado de forma 100% segura
+                NombreSala = dto.NombreSala,
+                MontoCuota = dto.MontoCuota,
+                Frecuencia = dto.Frecuencia,
+                CantidadParticipantes = dto.CantidadParticipantes,
+                EsPublica = dto.EsPublica,
+                FechaInicio = dto.FechaInicio
+                // Estado y FechaCreacion ya toman sus valores por defecto (1 y DateTime.UtcNow)
+            };
+
+            // 3. Guardar en la base de datos
+            _context.Salas.Add(nuevaSala);
+            await _context.SaveChangesAsync();
+
+            // 4. Mapeo Manual: De Entidad a DTO de Respuesta
+            var respuesta = new SalaRespuestaDto
+            {
+                Id = nuevaSala.Id,
+                CreadorId = nuevaSala.CreadorId,
+                NombreSala = nuevaSala.NombreSala,
+                MontoCuota = nuevaSala.MontoCuota,
+                Frecuencia = nuevaSala.Frecuencia,
+                CantidadParticipantes = nuevaSala.CantidadParticipantes,
+                EsPublica = nuevaSala.EsPublica,
+                Estado = nuevaSala.Estado,
+                FechaInicio = nuevaSala.FechaInicio,
+                FechaCreacion = nuevaSala.FechaCreacion
+            };
+
+            // Devuelve un Código 201 (Created) y apunta al método GetSala para ver el resultado
+            return CreatedAtAction(nameof(GetSala), new { id = nuevaSala.Id }, respuesta);
+        }
+
+        // GET: api/Salas/{id}
+        // Lo creamos rápidamente para que el CreatedAtAction de arriba funcione correctamente
+        [HttpGet("{id}")]
+        public async Task<IActionResult> GetSala(Guid id)
+        {
+            var sala = await _context.Salas.FindAsync(id);
+
+            if (sala == null)
+            {
+                return NotFound("La sala no existe.");
+            }
+
+            var respuesta = new SalaRespuestaDto
+            {
+                Id = sala.Id,
+                CreadorId = sala.CreadorId,
+                NombreSala = sala.NombreSala,
+                MontoCuota = sala.MontoCuota,
+                Frecuencia = sala.Frecuencia,
+                CantidadParticipantes = sala.CantidadParticipantes,
+                EsPublica = sala.EsPublica,
+                Estado = sala.Estado,
+                FechaInicio = sala.FechaInicio,
+                FechaCreacion = sala.FechaCreacion
+            };
+
+            return Ok(respuesta);
+        }
+
+        // GET: api/Salas
+        [HttpGet]
+        public async Task<IActionResult> GetTodasLasSalas()
+        {
+            // Traemos todas las salas y las convertimos al DTO de respuesta
+            var salas = await _context.Salas
+                .Select(s => new SalaRespuestaDto
+                {
+                    Id = s.Id,
+                    CreadorId = s.CreadorId,
+                    NombreSala = s.NombreSala,
+                    MontoCuota = s.MontoCuota,
+                    Frecuencia = s.Frecuencia,
+                    CantidadParticipantes = s.CantidadParticipantes,
+                    EsPublica = s.EsPublica,
+                    Estado = s.Estado,
+                    FechaInicio = s.FechaInicio,
+                    FechaCreacion = s.FechaCreacion
+                })
+                .ToListAsync();
+
+            return Ok(salas);
+        }
+
+        // PUT: api/Salas/{id}
+        [HttpPut("{id}")]
+        public async Task<IActionResult> ActualizarSala(Guid id, SalaActualizarDto dto)
+        {
+            // 1. Buscamos la sala en la base de datos
+            var sala = await _context.Salas.FindAsync(id);
+
+            if (sala == null)
+            {
+                return NotFound("La sala que intentas modificar no existe.");
+            }
+
+            // 2. SEGURIDAD: Extraemos el ID del usuario logueado desde el Token
+            var usuarioIdString = User.FindFirst(ClaimTypes.NameIdentifier)?.Value
+                               ?? User.FindFirst(JwtRegisteredClaimNames.Sub)?.Value;
+
+            // Comparamos si el usuario logueado es el dueño de la sala
+            if (sala.CreadorId.ToString() != usuarioIdString)
+            {
+                // Status 403 Forbid: Sabes quién eres (estás autenticado), pero no tienes permiso para esto
+                return StatusCode(403, "No tienes permiso para modificar esta sala. Solo el creador puede hacerlo.");
+            }
+
+            // 3. Si pasó la seguridad, actualizamos los datos permitidos
+            sala.NombreSala = dto.NombreSala;
+            sala.MontoCuota = dto.MontoCuota;
+            sala.Frecuencia = dto.Frecuencia;
+            sala.CantidadParticipantes = dto.CantidadParticipantes;
+            sala.EsPublica = dto.EsPublica;
+            sala.Estado = dto.Estado;
+
+            // 4. Guardamos los cambios
+            await _context.SaveChangesAsync();
+
+            return Ok(new { Mensaje = "Sala actualizada correctamente." });
+        }
+    }
+}

@@ -26,7 +26,7 @@ namespace SanApi.Modelos
 
         public bool EsPublica { get; set; } = false;
 
-        public int Estado { get; set; } = 1;
+        public EstadoSala Estado { get; set; } = EstadoSala.Reclutamiento;
 
         public DateTime FechaInicio { get; set; }
         public DateTime FechaCreacion { get; set; } = DateTime.UtcNow;
@@ -34,5 +34,13 @@ namespace SanApi.Modelos
         [ForeignKey("CreadorId")]
         [DeleteBehavior(DeleteBehavior.NoAction)]
         public virtual Usuario Creador { get; set; } = null!;
+    }
+
+    public enum EstadoSala
+    {
+        Reclutamiento = 1, // Sala abierta, esperando que la gente se una
+        EnCurso = 2,       // El San ya comenzó, juego cerrado
+        Finalizada = 3,    // Todos cobraron con éxito
+        Cancelada = 4      // El San fue anulado por el administrador
     }
 }
