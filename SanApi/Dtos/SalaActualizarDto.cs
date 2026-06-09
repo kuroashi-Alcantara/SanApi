@@ -12,8 +12,9 @@ namespace SanApi.Dtos
         [Required]
         public decimal MontoCuota { get; set; }
 
-        [Required]
-        public int Frecuencia { get; set; }
+        [Required(ErrorMessage = "La frecuencia es obligatoria.")]
+        [EnumDataType(typeof(FrecuenciaSala), ErrorMessage = "La frecuencia enviada no es válida. Solo se permite 1 (Semanal), 2 (Quincenal) o 3 (Mensual).")]
+        public FrecuenciaSala Frecuencia { get; set; }
 
         [Required]
         public int CantidadParticipantes { get; set; }
@@ -21,6 +22,6 @@ namespace SanApi.Dtos
         public bool EsPublica { get; set; }
 
         [EnumDataType(typeof(EstadoSala), ErrorMessage = "El estado enviado no es válido. Solo se permite del 1 al 4.")]
-        public EstadoSala Estado { get; set; }// Permitimos cambiar el estado
+        public EstadoSala Estado { get; set; }
     }
 }

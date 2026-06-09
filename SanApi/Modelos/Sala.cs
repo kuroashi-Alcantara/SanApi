@@ -19,7 +19,8 @@ namespace SanApi.Modelos
         public decimal MontoCuota { get; set; }
 
         [Required]
-        public int Frecuencia { get; set; } // 1: Semanal, 2: Quincenal, 3: Mensual
+        // 2. Cambiamos el tipo de int a FrecuenciaSala
+        public FrecuenciaSala Frecuencia { get; set; } = FrecuenciaSala.Mensual;
 
         [Required]
         public int CantidadParticipantes { get; set; }
@@ -34,6 +35,13 @@ namespace SanApi.Modelos
         [ForeignKey("CreadorId")]
         [DeleteBehavior(DeleteBehavior.NoAction)]
         public virtual Usuario Creador { get; set; } = null!;
+    }
+
+    public enum FrecuenciaSala
+    {
+        Semanal = 1,
+        Quincenal = 2,
+        Mensual = 3
     }
 
     public enum EstadoSala

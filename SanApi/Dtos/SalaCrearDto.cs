@@ -1,4 +1,5 @@
-﻿using System.ComponentModel.DataAnnotations;
+﻿using SanApi.Modelos;
+using System.ComponentModel.DataAnnotations;
 
 namespace SanApi.Dtos
 {
@@ -11,8 +12,9 @@ namespace SanApi.Dtos
         [Required]
         public decimal MontoCuota { get; set; }
 
-        [Required]
-        public int Frecuencia { get; set; } // 1: Semanal, 2: Quincenal, 3: Mensual
+        [Required(ErrorMessage = "La frecuencia es obligatoria.")]
+        [EnumDataType(typeof(FrecuenciaSala), ErrorMessage = "La frecuencia enviada no es válida. Solo se permite 1 (Semanal), 2 (Quincenal) o 3 (Mensual).")]
+        public FrecuenciaSala Frecuencia { get; set; }
 
         [Required]
         public int CantidadParticipantes { get; set; }
