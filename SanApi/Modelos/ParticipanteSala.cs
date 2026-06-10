@@ -17,7 +17,7 @@ namespace SanApi.Modelos
 
         public int NumeroTurno { get; set; }
 
-        public int EstadoParticipacion { get; set; } = 1;
+        public EstadoParticipacion EstadoParticipacion { get; set; } = EstadoParticipacion.Activo;
 
         [ForeignKey("SalaId")]
         public virtual Sala Sala { get; set; } = null!;
@@ -26,5 +26,12 @@ namespace SanApi.Modelos
         
         [DeleteBehavior(DeleteBehavior.NoAction)]
         public virtual Usuario Usuario { get; set; } = null!;
+    }
+
+    public enum EstadoParticipacion
+    {
+        Activo = 1,
+        Retirado = 2,
+        Sancionado = 3
     }
 }
