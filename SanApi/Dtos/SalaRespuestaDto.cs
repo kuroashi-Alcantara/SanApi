@@ -11,6 +11,7 @@ namespace SanApi.Dtos
         public FrecuenciaSala Frecuencia { get; set; }
         public int CantidadParticipantes { get; set; }
         public bool EsPublica { get; set; }
+        public bool PermitirMultiplesTurnos { get; set; }
         public EstadoSala Estado { get; set; }
         public DateTime FechaInicio { get; set; }
         public DateTime FechaCreacion { get; set; }

@@ -27,6 +27,9 @@ namespace SanApi.Modelos
 
         public bool EsPublica { get; set; } = false;
 
+        // Nueva regla de negocio: ¿Puede una persona comprar más de un número/turno?
+        public bool PermitirMultiplesTurnos { get; set; } = false;
+
         public EstadoSala Estado { get; set; } = EstadoSala.Reclutamiento;
 
         public DateTime FechaInicio { get; set; }

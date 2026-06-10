@@ -20,6 +20,7 @@ namespace SanApi.Dtos
         public int CantidadParticipantes { get; set; }
 
         public bool EsPublica { get; set; }
+        public bool PermitirMultiplesTurnos { get; set; }
 
         [EnumDataType(typeof(EstadoSala), ErrorMessage = "El estado enviado no es válido. Solo se permite del 1 al 4.")]
         public EstadoSala Estado { get; set; }

@@ -45,6 +45,7 @@ namespace SanApi.Controllers
                 Frecuencia = dto.Frecuencia,
                 CantidadParticipantes = dto.CantidadParticipantes,
                 EsPublica = dto.EsPublica,
+                PermitirMultiplesTurnos = dto.PermitirMultiplesTurnos,
                 FechaInicio = dto.FechaInicio
                 // Estado y FechaCreacion ya toman sus valores por defecto (1 y DateTime.UtcNow)
             };
@@ -93,6 +94,7 @@ namespace SanApi.Controllers
                 Frecuencia = sala.Frecuencia,
                 CantidadParticipantes = sala.CantidadParticipantes,
                 EsPublica = sala.EsPublica,
+                PermitirMultiplesTurnos = sala.PermitirMultiplesTurnos,
                 Estado = sala.Estado,
                 FechaInicio = sala.FechaInicio,
                 FechaCreacion = sala.FechaCreacion
@@ -116,6 +118,7 @@ namespace SanApi.Controllers
                     Frecuencia = s.Frecuencia,
                     CantidadParticipantes = s.CantidadParticipantes,
                     EsPublica = s.EsPublica,
+                    PermitirMultiplesTurnos = s.PermitirMultiplesTurnos,
                     Estado = s.Estado,
                     FechaInicio = s.FechaInicio,
                     FechaCreacion = s.FechaCreacion
@@ -154,6 +157,7 @@ namespace SanApi.Controllers
             sala.Frecuencia = dto.Frecuencia;
             sala.CantidadParticipantes = dto.CantidadParticipantes;
             sala.EsPublica = dto.EsPublica;
+            sala.PermitirMultiplesTurnos = dto.PermitirMultiplesTurnos;
             sala.Estado = dto.Estado;
 
             // 4. Guardamos los cambios

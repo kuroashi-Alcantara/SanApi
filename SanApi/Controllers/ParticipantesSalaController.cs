@@ -56,6 +56,19 @@ namespace SanApi.Controllers
                 return BadRequest("El San ya está lleno, no acepta más participantes.");
             }
 
+            // 4.5 Validar si la sala permite múltiples turnos para un mismo usuario
+            if (!sala.PermitirMultiplesTurnos)
+            {
+                // Verificamos si este usuario ya tiene al menos un registro en esta sala
+                var yaInscrito = await _context.ParticipantesSala
+                    .AnyAsync(p => p.SalaId == dto.SalaId && p.UsuarioId == dto.UsuarioId);
+
+                if (yaInscrito)
+                {
+                    return BadRequest("Este San no permite que un mismo participante tenga más de un turno.");
+                }
+            }
+
             // 5. Validar que el turno que eligió no esté ocupado
             var turnoOcupado = await _context.ParticipantesSala
                 .AnyAsync(p => p.SalaId == dto.SalaId && p.NumeroTurno == dto.NumeroTurno);
@@ -84,6 +97,34 @@ namespace SanApi.Controllers
             await _context.SaveChangesAsync();
 
             return StatusCode(201, new { Mensaje = "Participante agregado exitosamente al San." });
+        }
+
+        [HttpGet("sala/{salaId}")]
+        public async Task<IActionResult> GetParticipantesPorSala(Guid salaId)
+        {
+            // 1. Verificamos que la sala exista
+            var salaExiste = await _context.Salas.AnyAsync(s => s.Id == salaId);
+            if (!salaExiste)
+            {
+                return NotFound("La sala especificada no existe.");
+            }
+
+            // 2. Buscamos los participantes y los mapeamos al DTO de respuesta
+            var participantes = await _context.ParticipantesSala
+                .Where(p => p.SalaId == salaId)
+                .OrderBy(p => p.NumeroTurno) // Ordenados del turno 1 en adelante
+                .Select(p => new ParticipanteRespuestaDto
+                {
+                    Id = p.Id,
+                    SalaId = p.SalaId,
+                    UsuarioId = p.UsuarioId,
+                    NumeroTurno = p.NumeroTurno,
+                    EstadoParticipacion = p.EstadoParticipacion
+                })
+                .ToListAsync();
+
+            // 3. Devolvemos la lista (incluso si está vacía, devolverá un [] que es útil para el frontend)
+            return Ok(participantes);
         }
     }
 }

@@ -20,6 +20,7 @@ namespace SanApi.Dtos
         public int CantidadParticipantes { get; set; }
 
         public bool EsPublica { get; set; } = false;
+        public bool PermitirMultiplesTurnos { get; set; } = false;
 
         [Required]
         public DateTime FechaInicio { get; set; }
