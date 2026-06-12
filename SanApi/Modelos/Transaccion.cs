@@ -21,7 +21,8 @@ namespace SanApi.Modelos
         [MaxLength(500)]
         public string UrlVoucher { get; set; } = string.Empty;
 
-        public int EstadoPago { get; set; } = 1;
+        
+        public EstadoPago EstadoPago { get; set; } = EstadoPago.EnRevision;
 
         [ForeignKey("PeriodoId")]
         public virtual Periodo Periodo { get; set; } = null!;
@@ -29,5 +30,11 @@ namespace SanApi.Modelos
         [ForeignKey("UsuarioPagadorId")]
         [DeleteBehavior(DeleteBehavior.NoAction)]
         public virtual Usuario UsuarioPagador { get; set; } = null!;
+    }
+    public enum EstadoPago
+    {
+        EnRevision = 1,  // Cuando el usuario sube el voucher
+        Aprobado = 2,    // Pago confirmado por el organizador
+        Rechazado = 3    // Si el voucher es falso o incorrecto
     }
 }

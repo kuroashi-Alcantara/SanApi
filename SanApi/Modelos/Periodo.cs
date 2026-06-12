@@ -18,7 +18,7 @@ namespace SanApi.Modelos
 
         public Guid BeneficiarioId { get; set; }
 
-        public int EstadoPeriodo { get; set; } = 1;
+        public EstadoPeriodo EstadoPeriodo { get; set; } = EstadoPeriodo.Pendiente;
 
         public DateTime? FechaDesembolso { get; set; }
 
@@ -28,5 +28,11 @@ namespace SanApi.Modelos
         [ForeignKey("BeneficiarioId")]
         [DeleteBehavior(DeleteBehavior.NoAction)]
         public virtual Usuario Beneficiario { get; set; } = null!;
+    }
+    public enum EstadoPeriodo
+    {
+        Pendiente = 1,
+        Completado = 2,
+        Atrasado = 3
     }
 }
