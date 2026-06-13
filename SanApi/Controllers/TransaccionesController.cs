@@ -86,5 +86,81 @@ namespace SanApi.Controllers
                 Transaccion = respuesta
             });
         }
+
+        [HttpPut("Evaluar/{id}")]
+        public async Task<IActionResult> EvaluarPago(Guid id, [FromBody] EvaluarTransaccionDto dto)
+        {
+            var usuarioLogueadoId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+
+            // 1. Validar que la decisión sea válida (No puede volver a ponerlo en revisión)
+            if (dto.Estado == EstadoPago.EnRevision)
+            {
+                return BadRequest("El estado debe ser Aprobado o Rechazado.");
+            }
+
+            // 2. Buscar la transacción incluyendo el Periodo y la Sala para validar al creador
+            var transaccion = await _context.Transacciones
+                .Include(t => t.Periodo)
+                .ThenInclude(p => p.Sala)
+                .FirstOrDefaultAsync(t => t.Id == id);
+
+            if (transaccion == null)
+            {
+                return NotFound("La transacción especificada no existe.");
+            }
+
+            // 3. SEGURIDAD: Validar que el usuario logueado sea el dueño/creador de la sala
+            if (transaccion.Periodo.Sala.CreadorId.ToString() != usuarioLogueadoId)
+            {
+                return StatusCode(403, "Acceso denegado. Solo el organizador del San puede aprobar o rechazar pagos.");
+            }
+
+            // 4. Validar que la transacción no haya sido procesada antes para evitar duplicidad
+            if (transaccion.EstadoPago != EstadoPago.EnRevision)
+            {
+                return BadRequest($"Esta transacción ya fue evaluada previamente con el estado: {transaccion.EstadoPago}.");
+            }
+
+            // 5. Aplicar el nuevo estado
+            transaccion.EstadoPago = dto.Estado;
+
+            // Aquí guardamos el cambio de estado del pago
+            await _context.SaveChangesAsync();
+
+            return Ok(new
+            {
+                Mensaje = $"El pago ha sido {transaccion.EstadoPago.ToString().ToLower()} exitosamente.",
+                TransaccionId = transaccion.Id,
+                NuevoEstado = transaccion.EstadoPago
+            });
+        }
+
+        [HttpGet("periodo/{periodoId}")]
+        public async Task<IActionResult> ObtenerTransaccionesPorPeriodo(Guid periodoId)
+        {
+            // 1. Validar que el periodo exista
+            var periodoExiste = await _context.Periodos.AnyAsync(p => p.Id == periodoId);
+            if (!periodoExiste)
+            {
+                return NotFound("El periodo especificado no existe.");
+            }
+
+            // 2. Traer todas las transacciones de ese periodo y mapearlas al DTO
+            var transacciones = await _context.Transacciones
+                .Where(t => t.PeriodoId == periodoId)
+                .Select(t => new TransaccionRespuestaDto
+                {
+                    Id = t.Id,
+                    PeriodoId = t.PeriodoId,
+                    UsuarioPagadorId = t.UsuarioPagadorId,
+                    Monto = t.Monto,
+                    UrlVoucher = t.UrlVoucher,
+                    EstadoPago = t.EstadoPago
+                })
+                .ToListAsync();
+
+            // 3. Devolvemos la lista (si nadie ha pagado aún, devolverá un arreglo vacío [])
+            return Ok(transacciones);
+        }
     }
 }
