@@ -135,5 +135,49 @@ namespace SanApi.Controllers
             // 3. Devolver la lista de rondas
             return Ok(periodos);
         }
+
+        [HttpPut("Desembolsar/{id}")]
+        public async Task<IActionResult> RegistrarDesembolso(Guid id, [FromBody] DesembolsarPeriodoDto dto)
+        {
+            var usuarioLogueadoId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+
+            // 1. Buscar el periodo incluyendo la sala para poder validar quién es el creador
+            var periodo = await _context.Periodos
+                .Include(p => p.Sala)
+                .FirstOrDefaultAsync(p => p.Id == id);
+
+            if (periodo == null)
+            {
+                return NotFound("El periodo especificado no existe.");
+            }
+
+            // 2. SEGURIDAD: Validar que quien intenta desembolsar sea el organizador de la sala
+            if (periodo.Sala.CreadorId.ToString() != usuarioLogueadoId)
+            {
+                return StatusCode(403, "Acceso denegado. Solo el organizador del San puede registrar el desembolso y cerrar la ronda.");
+            }
+
+            // 3. Validar que no se haya desembolsado previamente
+            if (periodo.EstadoPeriodo == EstadoPeriodo.Completado)
+            {
+                return BadRequest("Este periodo ya ha sido marcado como completado y el dinero fue entregado.");
+            }
+
+            // 4. Actualizar los datos para cerrar oficialmente el periodo
+            periodo.UrlComprobanteDesembolso = dto.UrlComprobante;
+            periodo.EstadoPeriodo = EstadoPeriodo.Completado;
+            periodo.FechaDesembolso = DateTime.Now;
+
+            await _context.SaveChangesAsync();
+
+            return Ok(new
+            {
+                Mensaje = "Desembolso registrado exitosamente. La ronda ha finalizado.",
+                PeriodoId = periodo.Id,
+                FechaDesembolso = periodo.FechaDesembolso,
+                UrlComprobante = periodo.UrlComprobanteDesembolso,
+                EstadoActual = periodo.EstadoPeriodo
+            });
+        }
     }
 }

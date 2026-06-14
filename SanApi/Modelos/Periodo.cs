@@ -20,6 +20,9 @@ namespace SanApi.Modelos
 
         public EstadoPeriodo EstadoPeriodo { get; set; } = EstadoPeriodo.Pendiente;
 
+        [MaxLength(500)]
+        public string UrlComprobanteDesembolso { get; set; } = string.Empty;
+
         public DateTime? FechaDesembolso { get; set; }
 
         [ForeignKey("SalaId")]
