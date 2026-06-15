@@ -107,5 +107,76 @@ namespace SanApi.Controllers
 
             return Ok(panel);
         }
+
+
+        [HttpGet("PanelOrganizador")]
+        public async Task<IActionResult> ObtenerPanelOrganizador()
+        {
+            var usuarioLogueadoId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+            if (string.IsNullOrEmpty(usuarioLogueadoId)) return Unauthorized();
+
+            var usuarioId = Guid.Parse(usuarioLogueadoId);
+            var panelAdmin = new AdminDashboardRespuestaDto();
+
+            // 1. Salas Propias (Corregido el conteo de participantes)
+            var salasPropias = await _context.Salas
+                .Where(s => s.CreadorId == usuarioId && s.Estado != EstadoSala.Finalizada)
+                .Select(s => new SalaAdministradaDto
+                {
+                    SalaId = s.Id,
+                    NombreSala = s.NombreSala, // CORREGIDO
+                    // Buscamos directamente en la tabla ParticipantesSala usando el ID de la sala
+                    ParticipantesActivos = _context.ParticipantesSala.Count(p => p.SalaId == s.Id && p.EstadoParticipacion == EstadoParticipacion.Activo),
+                    Estado = s.Estado.ToString()
+                })
+                .ToListAsync();
+
+            panelAdmin.MisSalasOrganizadas = salasPropias;
+            var misSalasIds = salasPropias.Select(s => s.SalaId).ToList();
+
+            // 2. Vouchers pendientes por revisar
+            panelAdmin.VouchersPorRevisar = await _context.Transacciones
+                .Include(t => t.Periodo)
+                .ThenInclude(p => p.Sala)
+                .Include(t => t.UsuarioPagador)
+                .Where(t => misSalasIds.Contains(t.Periodo.SalaId) && t.EstadoPago == EstadoPago.EnRevision)
+                .Select(t => new VoucherPendienteDto
+                {
+                    TransaccionId = t.Id,
+                    NombreSala = t.Periodo.Sala.NombreSala, // CORREGIDO
+                    NumeroRonda = t.Periodo.NumeroRonda,
+                    NombrePagador = t.UsuarioPagador.NombreCompleto, // CORREGIDO
+                    Monto = t.Monto,
+                    UrlVoucher = t.UrlVoucher
+                })
+                .ToListAsync();
+
+            // 3. Desembolsos por hacer
+            var periodosDeMisSalas = await _context.Periodos
+                .Include(p => p.Sala)
+                .Include(p => p.Beneficiario)
+                .Where(p => misSalasIds.Contains(p.SalaId) && p.EstadoPeriodo == EstadoPeriodo.Pendiente)
+                .ToListAsync();
+
+            foreach (var periodo in periodosDeMisSalas)
+            {
+                var pagosAprobados = await _context.Transacciones
+                    .CountAsync(t => t.PeriodoId == periodo.Id && t.EstadoPago == EstadoPago.Aprobado);
+
+                if (pagosAprobados == periodo.Sala.CantidadParticipantes)
+                {
+                    panelAdmin.DesembolsosPorHacer.Add(new DesembolsoPendienteDto
+                    {
+                        PeriodoId = periodo.Id,
+                        NombreSala = periodo.Sala.NombreSala, // CORREGIDO
+                        NumeroRonda = periodo.NumeroRonda,
+                        NombreBeneficiario = periodo.Beneficiario.NombreCompleto, // CORREGIDO
+                        MontoTotalPozo = periodo.Sala.MontoCuota * periodo.Sala.CantidadParticipantes
+                    });
+                }
+            }
+
+            return Ok(panelAdmin);
+        }
     }
 }
