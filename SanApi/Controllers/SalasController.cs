@@ -165,5 +165,81 @@ namespace SanApi.Controllers
 
             return Ok(new { Mensaje = "Sala actualizada correctamente." });
         }
+
+        [HttpPost("{id}/SortearTurnos")]
+        public async Task<IActionResult> EjecutarTombola(Guid id)
+        {
+            var usuarioLogueadoId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+            if (string.IsNullOrEmpty(usuarioLogueadoId)) return Unauthorized();
+
+            var usuarioId = Guid.Parse(usuarioLogueadoId);
+
+            // 1. Buscar la sala
+            var sala = await _context.Salas.FindAsync(id);
+            if (sala == null) return NotFound("La sala no existe.");
+
+            // 2. SEGURIDAD: Solo el creador puede girar la tómbola
+            if (sala.CreadorId != usuarioId)
+            {
+                return StatusCode(403, "Solo el organizador de la sala puede realizar el sorteo de turnos.");
+            }
+
+            // 3. Validar el estado de la sala
+            if (sala.Estado != EstadoSala.Reclutamiento)
+            {
+                return BadRequest("El sorteo solo se puede realizar mientras la sala está en fase de reclutamiento.");
+            }
+
+            // 4. Validar las reglas de negocio que configuramos
+            if (!sala.SorteoTurnosAleatorio)
+            {
+                return BadRequest("Esta sala está configurada para asignación manual de turnos. No se puede usar la tómbola.");
+            }
+
+            // 5. Traer a los participantes activos
+            var participantes = await _context.ParticipantesSala
+                .Include(p => p.Usuario)
+                .Where(p => p.SalaId == id && p.EstadoParticipacion == EstadoParticipacion.Activo)
+                .ToListAsync();
+
+            if (participantes.Count == 0)
+            {
+                return BadRequest("No hay participantes en la sala para realizar el sorteo.");
+            }
+
+            // ====================================================================
+            // EL ALGORITMO DE LA TÓMBOLA
+            // ====================================================================
+
+            // Usamos Guid.NewGuid() para desordenar la lista de forma criptográficamente aleatoria
+            var participantesMezclados = participantes.OrderBy(p => Guid.NewGuid()).ToList();
+
+            var resultados = new List<ResultadoSorteoDto>();
+            int turnoActual = 1;
+
+            foreach (var participante in participantesMezclados)
+            {
+                // Asignamos el número
+                participante.NumeroTurno = turnoActual;
+
+                // Guardamos para el reporte visual
+                resultados.Add(new ResultadoSorteoDto
+                {
+                    NombreParticipante = participante.Usuario.NombreCompleto,
+                    NumeroTurno = turnoActual
+                });
+
+                turnoActual++;
+            }
+
+            // Guardamos los turnos oficiales en la base de datos
+            await _context.SaveChangesAsync();
+
+            return Ok(new
+            {
+                Mensaje = "¡Sorteo realizado con éxito! Los turnos han sido asignados aleatoriamente.",
+                Resultados = resultados.OrderBy(r => r.NumeroTurno) // Devolvemos la lista ordenada del 1 al N para que se vea bonita
+            });
+        }
     }
 }

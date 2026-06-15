@@ -163,6 +163,23 @@ namespace SanApi.Controllers
                 return BadRequest("Este periodo ya ha sido marcado como completado y el dinero fue entregado.");
             }
 
+            // ====================================================================
+            // CONDICIONAL INTELIGENTE: CONTROL DE DESEMBOLSO ANTICIPADO
+            // ====================================================================
+            if (!periodo.Sala.PermiteDesembolsoAnticipado)
+            {
+                // Si la sala NO permite desembolso anticipado (es estricta), contamos los pagos aprobados
+                var cantidadPagosAprobados = await _context.Transacciones
+                    .CountAsync(t => t.PeriodoId == id && t.EstadoPago == EstadoPago.Aprobado);
+
+                if (cantidadPagosAprobados < periodo.Sala.CantidadParticipantes)
+                {
+                    return BadRequest($"Operación denegada: Esta sala está configurada como ESTRICTA. Solo se han aprobado {cantidadPagosAprobados} de {periodo.Sala.CantidadParticipantes} pagos. Todos los participantes deben pagar antes de liberar el pozo.");
+                }
+            }
+            // Si permite el desembolso anticipado, el sistema ignora el conteo y lo deja pasar de forma flexible
+            // ====================================================================
+
             // 4. Actualizar los datos para cerrar oficialmente el periodo
             periodo.UrlComprobanteDesembolso = dto.UrlComprobante;
             periodo.EstadoPeriodo = EstadoPeriodo.Completado;

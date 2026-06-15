@@ -27,8 +27,20 @@ namespace SanApi.Modelos
 
         public bool EsPublica { get; set; } = false;
 
-        // Nueva regla de negocio: ¿Puede una persona comprar más de un número/turno?
+        // ¿Puede una persona comprar más de un número/turno?
         public bool PermitirMultiplesTurnos { get; set; } = false;
+
+        // ==========================================================
+        // NUEVAS REGLAS DE NEGOCIO (CONFIGURACIÓN DEL ORGANIZADOR)
+        // ==========================================================
+
+        // Determina si el sistema hace una tómbola o si el organizador asigna a mano
+        public bool SorteoTurnosAleatorio { get; set; } = true;
+
+        // Determina si se puede desembolsar sin que todos hayan pagado
+        public bool PermiteDesembolsoAnticipado { get; set; } = false;
+
+        // ==========================================================
 
         public EstadoSala Estado { get; set; } = EstadoSala.Reclutamiento;
 

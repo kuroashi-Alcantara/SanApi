@@ -56,6 +56,30 @@ namespace SanApi.Controllers
                 return StatusCode(403, "El usuario no es participante de la sala a la que pertenece este cobro.");
             }
 
+            // 4.5 Candado de Secuencia: Validar que no tenga pagos atrasados en rondas anteriores
+            var rondasAnterioresIds = await _context.Periodos
+                .Where(p => p.SalaId == periodo.SalaId && p.NumeroRonda < periodo.NumeroRonda)
+                .Select(p => p.Id)
+                .ToListAsync();
+
+            if (rondasAnterioresIds.Any())
+            {
+                // Contamos cuántas de esas rondas anteriores ya tienen un pago en revisión o aprobado por este usuario
+                var rondasPagadas = await _context.Transacciones
+                    .Where(t => rondasAnterioresIds.Contains(t.PeriodoId)
+                             && t.UsuarioPagadorId == dto.UsuarioPagadorId
+                             && (t.EstadoPago == EstadoPago.Aprobado || t.EstadoPago == EstadoPago.EnRevision))
+                    .Select(t => t.PeriodoId)
+                    .Distinct()
+                    .CountAsync();
+
+                // Si la cantidad de rondas pagadas es menor a la cantidad de rondas anteriores que existen, significa que debe alguna.
+                if (rondasPagadas < rondasAnterioresIds.Count)
+                {
+                    return BadRequest($"Orden incorrecto: No puedes abonar a la Ronda {periodo.NumeroRonda} porque tienes deudas pendientes en rondas anteriores.");
+                }
+            }
+
             // 5. Crear el registro en la base de datos
             var nuevaTransaccion = new Transaccion
             {
