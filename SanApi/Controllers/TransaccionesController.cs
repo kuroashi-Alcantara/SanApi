@@ -1,4 +1,5 @@
 ﻿using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using SanApi.Datos;
@@ -11,17 +12,19 @@ namespace SanApi.Controllers
     [Route("api/[controller]")]
     [ApiController]
     [Authorize]
-    public class TransaccionesController : Controller
+    public class TransaccionesController : ControllerBase // OPTIMIZADO: Cambiado a ControllerBase
     {
         private readonly AppDbContext _context;
+        private readonly IWebHostEnvironment _env;
 
-        public TransaccionesController(AppDbContext context)
+        public TransaccionesController(AppDbContext context, IWebHostEnvironment env)
         {
             _context = context;
+            _env = env;
         }
 
         [HttpPost]
-        public async Task<IActionResult> RegistrarPago([FromBody] TransaccionCrearDto dto)
+        public async Task<IActionResult> RegistrarPago([FromForm] TransaccionCrearDto dto)
         {
             var usuarioLogueadoId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
 
@@ -31,7 +34,7 @@ namespace SanApi.Controllers
                 return StatusCode(403, "Seguridad: No puedes registrar un pago a nombre de otro usuario.");
             }
 
-            // 2. Buscar el periodo y traer la información básica de la sala
+            // 2. Buscar el periodo y traer la información de la sala con sus reglas de negocio
             var periodo = await _context.Periodos
                 .Include(p => p.Sala)
                 .FirstOrDefaultAsync(p => p.Id == dto.PeriodoId);
@@ -41,10 +44,10 @@ namespace SanApi.Controllers
                 return NotFound("El periodo especificado no existe.");
             }
 
-            // 3. Validar que el periodo esté activo para recibir pagos
-            if (periodo.EstadoPeriodo == EstadoPeriodo.Completado)
+            // 3. CORREGIDO: Validar el estado del periodo respetando si la sala es flexible
+            if (periodo.EstadoPeriodo == EstadoPeriodo.Completado && !periodo.Sala.PermiteDesembolsoAnticipado)
             {
-                return BadRequest("No se pueden registrar pagos para un periodo que ya está cerrado y completado.");
+                return BadRequest("No se pueden registrar pagos para un periodo que ya está cerrado y completado en una sala estricta.");
             }
 
             // 4. Validar que el usuario realmente pertenezca a la sala de este periodo
@@ -56,6 +59,20 @@ namespace SanApi.Controllers
                 return StatusCode(403, "El usuario no es participante de la sala a la que pertenece este cobro.");
             }
 
+            // =========================================================
+            // NUEVA VALIDACIÓN: EVITAR PAGOS DUPLICADOS
+            // =========================================================
+            var yaTienePagoActivo = await _context.Transacciones
+                .AnyAsync(t => t.PeriodoId == dto.PeriodoId
+                            && t.UsuarioPagadorId == dto.UsuarioPagadorId
+                            && (t.EstadoPago == EstadoPago.Aprobado || t.EstadoPago == EstadoPago.EnRevision));
+
+            if (yaTienePagoActivo)
+            {
+                return BadRequest("Ya tienes un pago registrado o en revisión para esta ronda.");
+            }
+            // =========================================================
+
             // 4.5 Candado de Secuencia: Validar que no tenga pagos atrasados en rondas anteriores
             var rondasAnterioresIds = await _context.Periodos
                 .Where(p => p.SalaId == periodo.SalaId && p.NumeroRonda < periodo.NumeroRonda)
@@ -64,7 +81,6 @@ namespace SanApi.Controllers
 
             if (rondasAnterioresIds.Any())
             {
-                // Contamos cuántas de esas rondas anteriores ya tienen un pago en revisión o aprobado por este usuario
                 var rondasPagadas = await _context.Transacciones
                     .Where(t => rondasAnterioresIds.Contains(t.PeriodoId)
                              && t.UsuarioPagadorId == dto.UsuarioPagadorId
@@ -73,42 +89,47 @@ namespace SanApi.Controllers
                     .Distinct()
                     .CountAsync();
 
-                // Si la cantidad de rondas pagadas es menor a la cantidad de rondas anteriores que existen, significa que debe alguna.
                 if (rondasPagadas < rondasAnterioresIds.Count)
                 {
                     return BadRequest($"Orden incorrecto: No puedes abonar a la Ronda {periodo.NumeroRonda} porque tienes deudas pendientes en rondas anteriores.");
                 }
             }
 
-            // 5. Crear el registro en la base de datos
+            // =========================================================
+            // LÓGICA DE GUARDADO FÍSICO DE LA IMAGEN
+            // =========================================================
+            string carpetaDestino = Path.Combine(_env.WebRootPath ?? Path.Combine(Directory.GetCurrentDirectory(), "wwwroot"), "vouchers");
+
+            if (!Directory.Exists(carpetaDestino))
+            {
+                Directory.CreateDirectory(carpetaDestino);
+            }
+
+            string nombreArchivoUnico = Guid.NewGuid().ToString() + Path.GetExtension(dto.ImagenVoucher.FileName);
+            string rutaFisicaCompleta = Path.Combine(carpetaDestino, nombreArchivoUnico);
+
+            using (var fileStream = new FileStream(rutaFisicaCompleta, FileMode.Create))
+            {
+                await dto.ImagenVoucher.CopyToAsync(fileStream);
+            }
+
+            string urlBase = $"{Request.Scheme}://{Request.Host}";
+            string urlBD = $"{urlBase}/vouchers/{nombreArchivoUnico}";
+            // =========================================================
+
             var nuevaTransaccion = new Transaccion
             {
                 PeriodoId = dto.PeriodoId,
                 UsuarioPagadorId = dto.UsuarioPagadorId,
                 Monto = dto.Monto,
-                UrlVoucher = dto.UrlVoucher,
-                EstadoPago = EstadoPago.EnRevision // Todo pago entra en revisión por defecto
+                UrlVoucher = urlBD,
+                EstadoPago = EstadoPago.EnRevision
             };
 
             _context.Transacciones.Add(nuevaTransaccion);
             await _context.SaveChangesAsync();
 
-            // 6. Preparar la respuesta usando el DTO de salida
-            var respuesta = new TransaccionRespuestaDto
-            {
-                Id = nuevaTransaccion.Id,
-                PeriodoId = nuevaTransaccion.PeriodoId,
-                UsuarioPagadorId = nuevaTransaccion.UsuarioPagadorId,
-                Monto = nuevaTransaccion.Monto,
-                UrlVoucher = nuevaTransaccion.UrlVoucher,
-                EstadoPago = nuevaTransaccion.EstadoPago
-            };
-
-            return Ok(new
-            {
-                Mensaje = "Pago registrado exitosamente y en espera de revisión del organizador.",
-                Transaccion = respuesta
-            });
+            return Ok(new { Mensaje = "Pago registrado exitosamente. En espera de revisión.", TransaccionId = nuevaTransaccion.Id });
         }
 
         [HttpPut("Evaluar/{id}")]
@@ -116,13 +137,11 @@ namespace SanApi.Controllers
         {
             var usuarioLogueadoId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
 
-            // 1. Validar que la decisión sea válida (No puede volver a ponerlo en revisión)
             if (dto.Estado == EstadoPago.EnRevision)
             {
                 return BadRequest("El estado debe ser Aprobado o Rechazado.");
             }
 
-            // 2. Buscar la transacción incluyendo el Periodo y la Sala para validar al creador
             var transaccion = await _context.Transacciones
                 .Include(t => t.Periodo)
                 .ThenInclude(p => p.Sala)
@@ -133,22 +152,17 @@ namespace SanApi.Controllers
                 return NotFound("La transacción especificada no existe.");
             }
 
-            // 3. SEGURIDAD: Validar que el usuario logueado sea el dueño/creador de la sala
             if (transaccion.Periodo.Sala.CreadorId.ToString() != usuarioLogueadoId)
             {
                 return StatusCode(403, "Acceso denegado. Solo el organizador del San puede aprobar o rechazar pagos.");
             }
 
-            // 4. Validar que la transacción no haya sido procesada antes para evitar duplicidad
             if (transaccion.EstadoPago != EstadoPago.EnRevision)
             {
                 return BadRequest($"Esta transacción ya fue evaluada previamente con el estado: {transaccion.EstadoPago}.");
             }
 
-            // 5. Aplicar el nuevo estado
             transaccion.EstadoPago = dto.Estado;
-
-            // Aquí guardamos el cambio de estado del pago
             await _context.SaveChangesAsync();
 
             return Ok(new
@@ -162,14 +176,12 @@ namespace SanApi.Controllers
         [HttpGet("periodo/{periodoId}")]
         public async Task<IActionResult> ObtenerTransaccionesPorPeriodo(Guid periodoId)
         {
-            // 1. Validar que el periodo exista
             var periodoExiste = await _context.Periodos.AnyAsync(p => p.Id == periodoId);
             if (!periodoExiste)
             {
                 return NotFound("El periodo especificado no existe.");
             }
 
-            // 2. Traer todas las transacciones de ese periodo y mapearlas al DTO
             var transacciones = await _context.Transacciones
                 .Where(t => t.PeriodoId == periodoId)
                 .Select(t => new TransaccionRespuestaDto
@@ -183,7 +195,6 @@ namespace SanApi.Controllers
                 })
                 .ToListAsync();
 
-            // 3. Devolvemos la lista (si nadie ha pagado aún, devolverá un arreglo vacío [])
             return Ok(transacciones);
         }
     }

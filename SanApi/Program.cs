@@ -72,6 +72,9 @@ if (app.Environment.IsDevelopment())
     app.UseSwaggerUI();
 }
 
+//  LÍNEA PARA SERVIR IMÁGENES
+app.UseStaticFiles();
+
 app.UseHttpsRedirection();
 
 

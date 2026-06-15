@@ -14,8 +14,8 @@ namespace SanApi.Dtos
         [Range(0.01, double.MaxValue, ErrorMessage = "El monto del pago debe ser mayor a 0.")]
         public decimal Monto { get; set; }
 
-        [Required(ErrorMessage = "Debe enviar el comprobante o voucher de pago.")]
-        [MaxLength(500, ErrorMessage = "La ruta del voucher es demasiado larga.")]
-        public string UrlVoucher { get; set; } = string.Empty;
+        // Cambiamos el string por IFormFile para recibir los bytes físicos de la foto
+        [Required(ErrorMessage = "Debe adjuntar la imagen del comprobante.")]
+        public IFormFile ImagenVoucher { get; set; } = null!;
     }
 }
