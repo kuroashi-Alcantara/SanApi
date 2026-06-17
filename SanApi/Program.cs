@@ -63,6 +63,17 @@ builder.Services.AddSwaggerGen(c =>
     });
 });
 
+// 1. REGISTRAR CORS
+builder.Services.AddCors(options =>
+{
+    options.AddPolicy("PoliticaDesarrollo", app =>
+    {
+        app.AllowAnyOrigin()  // Permite cualquier dominio (localhost:3000, localhost:4200, etc)
+           .AllowAnyHeader()  // Permite cualquier cabecera (Authorization, Content-Type, etc)
+           .AllowAnyMethod(); // Permite cualquier método (GET, POST, PUT, DELETE)
+    });
+});
+
 var app = builder.Build();
 
 // Configure the HTTP request pipeline.
@@ -77,6 +88,8 @@ app.UseStaticFiles();
 
 app.UseHttpsRedirection();
 
+// 2. ACTIVAR CORS 
+app.UseCors("PoliticaDesarrollo");
 
 app.UseAuthentication(); // 1. Primero verifica quién eres 
 app.UseAuthorization();  // 2. Luego verifica qué puedes hacer 
