@@ -86,7 +86,11 @@ if (app.Environment.IsDevelopment())
 //  LÍNEA PARA SERVIR IMÁGENES
 app.UseStaticFiles();
 
-app.UseHttpsRedirection();
+// Solo aplica la redirección HTTPS si la aplicación NO está en desarrollo local
+if (!app.Environment.IsDevelopment())
+{
+    app.UseHttpsRedirection();
+}
 
 // 2. ACTIVAR CORS 
 app.UseCors("PoliticaDesarrollo");
