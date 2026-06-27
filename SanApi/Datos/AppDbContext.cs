@@ -14,6 +14,8 @@ namespace SanApi.Datos
         public DbSet<ParticipanteSala> ParticipantesSala { get; set; }
         public DbSet<Periodo> Periodos { get; set; }
         public DbSet<Transaccion> Transacciones { get; set; }
+        public DbSet<Contacto> Contactos { get; set; }
+        public DbSet<Notificacion> Notificaciones { get; set; }
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
