@@ -14,6 +14,10 @@ namespace SanApi.Modelos
         [Required, EmailAddress, MaxLength(150)]
         public string Correo { get; set; } = string.Empty;
 
+        // verificar correo
+        public bool CorreoVerificado { get; set; } = false; // Empieza en falso
+        public string? CodigoVerificacion { get; set; } // El código de 4 o 6 dígitos (puede ser nulo)
+
         [Required, MaxLength(20)]
         public string Telefono { get; set; } = string.Empty;
 
