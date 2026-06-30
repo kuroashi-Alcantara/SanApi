@@ -5,6 +5,7 @@ using Microsoft.IdentityModel.Tokens;
 using SanApi.Datos;
 using SanApi.Dtos;
 using SanApi.Modelos;
+using SanApi.Servicios;
 using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
 using System.Text;
@@ -18,56 +19,55 @@ namespace SanApi.Controllers
         
         private readonly AppDbContext _context;
         private readonly IConfiguration _config;
+        private readonly ICorreoServicio _correoServicio;
 
-        public UsuarioController(AppDbContext context, IConfiguration config)
+        public UsuarioController(AppDbContext context, IConfiguration config, ICorreoServicio correoServicio)
         {
             _context = context;
             _config = config;
+            _correoServicio = correoServicio;
         }
 
         // POST: api/usuario/registro
         [HttpPost("registro")]
         public async Task<IActionResult> RegistrarUsuario([FromBody] UsuarioRegistroDto dto)
         {
-            // 1. Validar si el correo ya está registrado en el sistema
             var usuarioExistente = await _context.Usuarios.FirstOrDefaultAsync(u => u.Correo == dto.Correo);
             if (usuarioExistente != null)
             {
-                return BadRequest(new { Mensaje = "Este correo ya está registrado en la aplicación." });
+                return BadRequest(new { Mensaje = "Este correo ya está registrado." });
             }
 
-            // 2. Generar un código aleatorio de 6 dígitos para la verificación "Hard-Gate"
             var rnd = new Random();
             string codigoGenerado = rnd.Next(100000, 999999).ToString();
 
-            // 3. Ensamblar la entidad Usuario con todos sus campos
+            // 1. Preparamos el usuario en memoria (NO lo guardamos en la BD todavía)
             var nuevoUsuario = new Usuario
             {
-                // Nota: Id, FechaRegistro, ScoreRiesgo y Rol(1) ya tienen valores 
-                // por defecto en tu clase, así que no es obligatorio ponerlos aquí, 
-                // pero mapeamos los que vienen del DTO y la seguridad.
                 NombreCompleto = dto.NombreCompleto,
                 Correo = dto.Correo,
-                Telefono = dto.Telefono, // ¡Agregado!
+                Telefono = dto.Telefono,
                 ContrasenaHash = BCrypt.Net.BCrypt.HashPassword(dto.Contrasena),
-
-                // Campos de control de verificación
                 CorreoVerificado = false,
                 CodigoVerificacion = codigoGenerado
             };
 
-            // 4. Guardar en la base de datos
-            _context.Usuarios.Add(nuevoUsuario);
-            await _context.SaveChangesAsync();
-
-            // 5. Devolver respuesta (Simulando el envío de correo por ahora)
-            return Ok(new
+            // 2. INTENTAMOS ENVIAR EL CORREO PRIMERO
+            try
             {
-                Mensaje = "Usuario registrado. Revisa tu correo electrónico para obtener el código de verificación.",
-                UsuarioId = nuevoUsuario.Id,
-                // TODO: Recuerda quitar esto cuando implementemos el envío de correos reales
-                CodigoSecretoParaPruebas = codigoGenerado
-            });
+                await _correoServicio.EnviarCodigoVerificacionAsync(nuevoUsuario.Correo, nuevoUsuario.NombreCompleto, codigoGenerado);
+
+                // 3. SI EL CORREO SE ACEPTÓ, ENTONCES SÍ GUARDAMOS EN LA BASE DE DATOS
+                _context.Usuarios.Add(nuevoUsuario);
+                await _context.SaveChangesAsync();
+
+                return Ok(new { Mensaje = "Usuario registrado exitosamente. Por favor, revisa tu correo electrónico para verificar tu cuenta." });
+            }
+            catch (Exception)
+            {
+                // Si el proveedor (Brevo) detecta un error de formato o dominio inválido y rechaza el mensaje:
+                return BadRequest(new { Mensaje = "El correo proporcionado parece ser inválido o no puede recibir mensajes. Por favor, verifica que esté bien escrito." });
+            }
         }
 
         //Verificar correo

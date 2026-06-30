@@ -4,6 +4,7 @@ using Microsoft.IdentityModel.Tokens;
 using SanApi.Datos;
 using System.Text;
 using Microsoft.OpenApi.Models;
+using SanApi.Servicios;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -73,6 +74,9 @@ builder.Services.AddCors(options =>
            .AllowAnyMethod(); // Permite cualquier método (GET, POST, PUT, DELETE)
     });
 });
+
+//Correoservicios
+builder.Services.AddScoped<ICorreoServicio, CorreoServicio>();
 
 var app = builder.Build();
 
