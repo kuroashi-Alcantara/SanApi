@@ -238,5 +238,6 @@ namespace SanApi.Controllers
 
             return Ok(new { Mensaje = "Perfil actualizado correctamente." });
         }
+       
     }
 }
