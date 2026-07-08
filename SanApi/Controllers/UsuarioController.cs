@@ -208,36 +208,53 @@ namespace SanApi.Controllers
             });
         }
 
+
+        //PUT
         [HttpPut("perfil")]
         [Authorize]
         public async Task<IActionResult> ActualizarPerfil([FromBody] UsuarioActualizarDto dto)
         {
-            // 1. Extraemos el ID del usuario desde los Claims del Token JWT
+            //chismoso
+            Console.WriteLine($"C# RECIBIÓ -> Nombre: {dto.NombreCompleto} | Teléfono: {dto.Telefono}");
+
             var usuarioIdClaim = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+            if (string.IsNullOrEmpty(usuarioIdClaim)) return Unauthorized(new { Mensaje = "No se pudo identificar al usuario." });
 
-            if (string.IsNullOrEmpty(usuarioIdClaim))
-            {
-                return Unauthorized(new { Mensaje = "No se pudo identificar al usuario." });
-            }
-
-            // 2. Buscamos el usuario en la base de datos
             var usuario = await _context.Usuarios.FindAsync(Guid.Parse(usuarioIdClaim));
+            if (usuario == null) return NotFound(new { Mensaje = "Usuario no encontrado." });
 
-            if (usuario == null)
-            {
-                return NotFound(new { Mensaje = "Usuario no encontrado." });
-            }
-
-            // 3. Actualizamos los campos
+            
             usuario.NombreCompleto = dto.NombreCompleto;
-            usuario.Correo = dto.Correo;
             usuario.Telefono = dto.Telefono;
+            // EL CORREO NO SE TOCA
 
-            // 4. Guardamos los cambios usando Entity Framework
             await _context.SaveChangesAsync();
-
             return Ok(new { Mensaje = "Perfil actualizado correctamente." });
         }
-       
+
+        [HttpPut("cambiar-contrasena")]
+        [Authorize]
+        public async Task<IActionResult> CambiarContrasena([FromBody] CambiarContrasenaDto dto)
+        {
+            var usuarioIdClaim = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+            if (string.IsNullOrEmpty(usuarioIdClaim)) return Unauthorized();
+
+            var usuario = await _context.Usuarios.FindAsync(Guid.Parse(usuarioIdClaim));
+            if (usuario == null) return NotFound();
+
+            // 1. Verificamos que la contraseña actual que escribió sea correcta
+            bool contrasenaValida = BCrypt.Net.BCrypt.Verify(dto.ContrasenaActual, usuario.ContrasenaHash);
+            if (!contrasenaValida)
+            {
+                return BadRequest(new { Mensaje = "La contraseña actual es incorrecta." });
+            }
+
+            // 2. Si es correcta, encriptamos la nueva contraseña
+            usuario.ContrasenaHash = BCrypt.Net.BCrypt.HashPassword(dto.NuevaContrasena);
+
+            await _context.SaveChangesAsync();
+            return Ok(new { Mensaje = "Contraseña actualizada con éxito." });
+        }
+
     }
 }

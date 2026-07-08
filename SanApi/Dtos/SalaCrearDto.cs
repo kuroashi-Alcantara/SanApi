@@ -21,6 +21,7 @@ namespace SanApi.Dtos
 
         public bool EsPublica { get; set; } = false;
         public bool PermitirMultiplesTurnos { get; set; } = false;
+        public bool PermiteDesembolsoAnticipado { get; set; }
 
         [Required]
         public DateTime FechaInicio { get; set; }

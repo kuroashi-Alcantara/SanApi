@@ -46,6 +46,7 @@ namespace SanApi.Controllers
                 CantidadParticipantes = dto.CantidadParticipantes,
                 EsPublica = dto.EsPublica,
                 PermitirMultiplesTurnos = dto.PermitirMultiplesTurnos,
+                PermiteDesembolsoAnticipado = dto.PermiteDesembolsoAnticipado,
                 FechaInicio = dto.FechaInicio
                 // Estado y FechaCreacion ya toman sus valores por defecto (1 y DateTime.UtcNow)
             };
@@ -64,6 +65,8 @@ namespace SanApi.Controllers
                 Frecuencia = nuevaSala.Frecuencia,
                 CantidadParticipantes = nuevaSala.CantidadParticipantes,
                 EsPublica = nuevaSala.EsPublica,
+                PermitirMultiplesTurnos = nuevaSala.PermitirMultiplesTurnos,
+                PermiteDesembolsoAnticipado = nuevaSala.PermiteDesembolsoAnticipado,
                 Estado = nuevaSala.Estado,
                 FechaInicio = nuevaSala.FechaInicio,
                 FechaCreacion = nuevaSala.FechaCreacion
@@ -164,6 +167,106 @@ namespace SanApi.Controllers
             await _context.SaveChangesAsync();
 
             return Ok(new { Mensaje = "Sala actualizada correctamente." });
+        }
+
+        //nuevos endopoijnt para salas
+        // GET: api/Salas/administradas
+        [HttpGet("administradas")]
+        public async Task<IActionResult> GetSalasAdministradas()
+        {
+            // 1. Obtenemos el ID del usuario del Token
+            var usuarioIdString = User.FindFirst(ClaimTypes.NameIdentifier)?.Value
+                ?? User.FindFirst(JwtRegisteredClaimNames.Sub)?.Value;
+
+            if (string.IsNullOrEmpty(usuarioIdString) || !Guid.TryParse(usuarioIdString, out Guid usuarioId))
+                return Unauthorized();
+
+            // 2. Filtramos donde él sea el creador
+            var salas = await _context.Salas
+                .Where(s => s.CreadorId == usuarioId)
+                .Select(s => new SalaRespuestaDto
+                {
+                    Id = s.Id,
+                    CreadorId = s.CreadorId,
+                    NombreSala = s.NombreSala,
+                    MontoCuota = s.MontoCuota,
+                    Frecuencia = s.Frecuencia,
+                    CantidadParticipantes = s.CantidadParticipantes,
+                    EsPublica = s.EsPublica,
+                    PermitirMultiplesTurnos = s.PermitirMultiplesTurnos,
+                    Estado = s.Estado,
+                    FechaInicio = s.FechaInicio,
+                    FechaCreacion = s.FechaCreacion
+                })
+                .ToListAsync();
+
+            return Ok(salas);
+        }
+
+        // GET: api/Salas/participadas
+        [HttpGet("participadas")]
+        public async Task<IActionResult> GetSalasParticipadas()
+        {
+            var usuarioIdString = User.FindFirst(ClaimTypes.NameIdentifier)?.Value
+                ?? User.FindFirst(JwtRegisteredClaimNames.Sub)?.Value;
+
+            if (string.IsNullOrEmpty(usuarioIdString) || !Guid.TryParse(usuarioIdString, out Guid usuarioId))
+                return Unauthorized();
+
+            // Filtramos usando la tabla intermedia ParticipantesSala
+            var salas = await _context.ParticipantesSala
+                .Where(p => p.UsuarioId == usuarioId)
+                .Include(p => p.Sala) // Traemos los datos de la sala
+                .Select(p => new SalaRespuestaDto
+                {
+                    Id = p.Sala.Id,
+                    CreadorId = p.Sala.CreadorId,
+                    NombreSala = p.Sala.NombreSala,
+                    MontoCuota = p.Sala.MontoCuota,
+                    Frecuencia = p.Sala.Frecuencia,
+                    CantidadParticipantes = p.Sala.CantidadParticipantes,
+                    EsPublica = p.Sala.EsPublica,
+                    PermitirMultiplesTurnos = p.Sala.PermitirMultiplesTurnos,
+                    Estado = p.Sala.Estado,
+                    FechaInicio = p.Sala.FechaInicio,
+                    FechaCreacion = p.Sala.FechaCreacion
+                })
+                .ToListAsync();
+
+            return Ok(salas);
+        }
+
+        // POST: api/Salas/unirse/{codigoSala}
+        [HttpPost("unirse/{codigoSala}")]
+        public async Task<IActionResult> UnirseASala(Guid codigoSala) // Asumiendo que usan el Id como código por ahora
+        {
+            var usuarioIdString = User.FindFirst(ClaimTypes.NameIdentifier)?.Value
+                ?? User.FindFirst(JwtRegisteredClaimNames.Sub)?.Value;
+
+            if (string.IsNullOrEmpty(usuarioIdString) || !Guid.TryParse(usuarioIdString, out Guid usuarioId))
+                return Unauthorized();
+
+            var sala = await _context.Salas.FindAsync(codigoSala);
+            if (sala == null) return NotFound("La sala no existe.");
+
+            // Validar si ya está en la sala
+            var yaExiste = await _context.ParticipantesSala
+                .AnyAsync(p => p.SalaId == codigoSala && p.UsuarioId == usuarioId);
+
+            if (yaExiste) return BadRequest("Ya eres participante de esta sala.");
+
+            // Agregar a la tabla intermedia
+            var nuevoParticipante = new ParticipanteSala
+            {
+                SalaId = codigoSala,
+                UsuarioId = usuarioId,
+                EstadoParticipacion = EstadoParticipacion.Activo // O el enum que utilices
+            };
+
+            _context.ParticipantesSala.Add(nuevoParticipante);
+            await _context.SaveChangesAsync();
+
+            return Ok(new { Mensaje = "Te has unido a la sala exitosamente." });
         }
 
         [HttpPost("{id}/SortearTurnos")]

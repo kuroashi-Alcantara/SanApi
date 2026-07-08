@@ -7,10 +7,6 @@ namespace SanApi.Dtos
         [Required(ErrorMessage = "El nombre es obligatorio.")]
         public string NombreCompleto { get; set; } = string.Empty;
 
-        [Required(ErrorMessage = "El correo es obligatorio.")]
-        [EmailAddress]
-        public string Correo { get; set; } = string.Empty;
-
         public string Telefono { get; set; } = string.Empty;
     }
 }
