@@ -50,6 +50,9 @@ namespace SanApi.Modelos
         [ForeignKey("CreadorId")]
         [DeleteBehavior(DeleteBehavior.NoAction)]
         public virtual Usuario Creador { get; set; } = null!;
+
+       
+        public virtual ICollection<ParticipanteSala> ParticipantesSalas { get; set; } = new List<ParticipanteSala>();
     }
 
     public enum FrecuenciaSala

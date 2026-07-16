@@ -6,6 +6,7 @@ using SanApi.Dtos;
 using SanApi.Modelos; 
 using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
+using static System.Runtime.InteropServices.JavaScript.JSType;
 
 namespace SanApi.Controllers
 {
@@ -81,7 +82,11 @@ namespace SanApi.Controllers
         [HttpGet("{id}")]
         public async Task<IActionResult> GetSala(Guid id)
         {
-            var sala = await _context.Salas.FindAsync(id);
+            // Usamos Include para traer la relación Muchos a Muchos
+            var sala = await _context.Salas
+                .Include(s => s.ParticipantesSalas) // Tu tabla intermedia
+                    .ThenInclude(ps => ps.Usuario)  // Traemos los datos del usuario real
+                .FirstOrDefaultAsync(s => s.Id == id);
 
             if (sala == null)
             {
@@ -98,9 +103,19 @@ namespace SanApi.Controllers
                 CantidadParticipantes = sala.CantidadParticipantes,
                 EsPublica = sala.EsPublica,
                 PermitirMultiplesTurnos = sala.PermitirMultiplesTurnos,
+                // No olvidemos el campo que agregamos hace un rato:
+                PermiteDesembolsoAnticipado = sala.PermiteDesembolsoAnticipado,
                 Estado = sala.Estado,
                 FechaInicio = sala.FechaInicio,
-                FechaCreacion = sala.FechaCreacion
+                FechaCreacion = sala.FechaCreacion,
+
+                // Mapeamos la lista de participantes dinámicamente
+                Participantes = sala.ParticipantesSalas.Select(ps => new ParticipanteSalaDto
+                {
+                    UsuarioId = ps.UsuarioId,
+                    Nombre = ps.Usuario.NombreCompleto, 
+                    NumeroTurno = ps.NumeroTurno
+                }).ToList()
             };
 
             return Ok(respuesta);
@@ -162,6 +177,8 @@ namespace SanApi.Controllers
             sala.EsPublica = dto.EsPublica;
             sala.PermitirMultiplesTurnos = dto.PermitirMultiplesTurnos;
             sala.Estado = dto.Estado;
+            sala.PermiteDesembolsoAnticipado = dto.PermiteDesembolsoAnticipado;
+            sala.FechaInicio = dto.FechaInicio;
 
             // 4. Guardamos los cambios
             await _context.SaveChangesAsync();

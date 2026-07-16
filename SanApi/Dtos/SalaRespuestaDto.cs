@@ -16,5 +16,9 @@ namespace SanApi.Dtos
         public EstadoSala Estado { get; set; }
         public DateTime FechaInicio { get; set; }
         public DateTime FechaCreacion { get; set; }
+
+        public List<ParticipanteSalaDto> Participantes { get; set; } = new List<ParticipanteSalaDto>();
     }
-}
+
+
+  }

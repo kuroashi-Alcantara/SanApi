@@ -17,10 +17,16 @@ namespace SanApi.Dtos
         public FrecuenciaSala Frecuencia { get; set; }
 
         [Required]
+        public DateTime FechaInicio { get; set; }
+
+        [Required]
         public int CantidadParticipantes { get; set; }
 
         public bool EsPublica { get; set; }
         public bool PermitirMultiplesTurnos { get; set; }
+
+        [Required]
+        public bool PermiteDesembolsoAnticipado { get; set; } = false;
 
         [EnumDataType(typeof(EstadoSala), ErrorMessage = "El estado enviado no es válido. Solo se permite del 1 al 4.")]
         public EstadoSala Estado { get; set; }
