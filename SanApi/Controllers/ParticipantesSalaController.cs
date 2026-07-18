@@ -126,5 +126,77 @@ namespace SanApi.Controllers
             // 3. Devolvemos la lista (incluso si está vacía, devolverá un [] que es útil para el frontend)
             return Ok(participantes);
         }
+
+        // PUT: api/ParticipantesSala/{salaId}/aceptar/{usuarioId}
+        [HttpPut("{salaId}/aceptar/{usuarioId}")]
+        public async Task<IActionResult> AceptarParticipante(Guid salaId, Guid usuarioId)
+        {
+            // 1. Identificar quién está ejecutando esta acción
+            var usuarioLogueadoId = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+
+            var sala = await _context.Salas.FindAsync(salaId);
+            if (sala == null) return NotFound("La sala no existe.");
+
+            // 2. Seguridad: Solo el creador de la sala puede aceptar participantes
+            if (sala.CreadorId.ToString() != usuarioLogueadoId)
+            {
+                return StatusCode(403, "Solo el creador del San puede aceptar solicitudes.");
+            }
+
+            // 3. Buscar la solicitud pendiente
+            var participante = await _context.ParticipantesSala
+                .FirstOrDefaultAsync(p => p.SalaId == salaId && p.UsuarioId == usuarioId);
+
+            if (participante == null)
+                return NotFound("No se encontró la solicitud de este usuario.");
+
+            if (participante.EstadoParticipacion == EstadoParticipacion.Activo)
+                return BadRequest("Este usuario ya es un participante activo.");
+
+            // 4. Validar límite de la sala antes de aceptar
+            var cantidadActual = await _context.ParticipantesSala
+                .CountAsync(p => p.SalaId == salaId && p.EstadoParticipacion == EstadoParticipacion.Activo);
+
+            if (cantidadActual >= sala.CantidadParticipantes)
+            {
+                return BadRequest("El San ya está lleno, no puedes aceptar más participantes.");
+            }
+
+            // 5. ¡Aceptado! Cambiamos el estado
+            participante.EstadoParticipacion = EstadoParticipacion.Activo;
+
+            // Nota: Si usas la tómbola para los turnos, dejamos el NumeroTurno en 0.
+            // Si es manual, aquí podrías asignarle el turno correspondiente.
+
+            await _context.SaveChangesAsync();
+            return Ok(new { Mensaje = "Participante aceptado exitosamente." });
+        }
+
+        // DELETE: api/ParticipantesSala/{salaId}/rechazar/{usuarioId}
+        [HttpDelete("{salaId}/rechazar/{usuarioId}")]
+        public async Task<IActionResult> RechazarParticipante(Guid salaId, Guid usuarioId)
+        {
+            var usuarioLogueadoId = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+
+            var sala = await _context.Salas.FindAsync(salaId);
+            if (sala == null) return NotFound("La sala no existe.");
+
+            if (sala.CreadorId.ToString() != usuarioLogueadoId)
+            {
+                return StatusCode(403, "Solo el creador del San puede rechazar solicitudes.");
+            }
+
+            var participante = await _context.ParticipantesSala
+                .FirstOrDefaultAsync(p => p.SalaId == salaId && p.UsuarioId == usuarioId);
+
+            if (participante == null)
+                return NotFound("No se encontró la solicitud.");
+
+            // Si lo rechaza, lo más limpio para una solicitud es borrar el registro
+            _context.ParticipantesSala.Remove(participante);
+            await _context.SaveChangesAsync();
+
+            return Ok(new { Mensaje = "Solicitud rechazada y eliminada." });
+        }
     }
 }

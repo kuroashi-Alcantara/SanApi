@@ -103,7 +103,6 @@ namespace SanApi.Controllers
                 CantidadParticipantes = sala.CantidadParticipantes,
                 EsPublica = sala.EsPublica,
                 PermitirMultiplesTurnos = sala.PermitirMultiplesTurnos,
-                // No olvidemos el campo que agregamos hace un rato:
                 PermiteDesembolsoAnticipado = sala.PermiteDesembolsoAnticipado,
                 Estado = sala.Estado,
                 FechaInicio = sala.FechaInicio,
@@ -114,7 +113,8 @@ namespace SanApi.Controllers
                 {
                     UsuarioId = ps.UsuarioId,
                     Nombre = ps.Usuario.NombreCompleto, 
-                    NumeroTurno = ps.NumeroTurno
+                    NumeroTurno = ps.NumeroTurno,
+                    EstadoParticipacion = (int)ps.EstadoParticipacion
                 }).ToList()
             };
 
@@ -255,7 +255,7 @@ namespace SanApi.Controllers
 
         // POST: api/Salas/unirse/{codigoSala}
         [HttpPost("unirse/{codigoSala}")]
-        public async Task<IActionResult> UnirseASala(Guid codigoSala) // Asumiendo que usan el Id como código por ahora
+        public async Task<IActionResult> UnirseASala(Guid codigoSala) // usamos el id como codigo por ahora
         {
             var usuarioIdString = User.FindFirst(ClaimTypes.NameIdentifier)?.Value
                 ?? User.FindFirst(JwtRegisteredClaimNames.Sub)?.Value;
@@ -277,7 +277,7 @@ namespace SanApi.Controllers
             {
                 SalaId = codigoSala,
                 UsuarioId = usuarioId,
-                EstadoParticipacion = EstadoParticipacion.Activo // O el enum que utilices
+                EstadoParticipacion = EstadoParticipacion.Pendiente
             };
 
             _context.ParticipantesSala.Add(nuevoParticipante);
@@ -346,7 +346,9 @@ namespace SanApi.Controllers
                 resultados.Add(new ResultadoSorteoDto
                 {
                     NombreParticipante = participante.Usuario.NombreCompleto,
-                    NumeroTurno = turnoActual
+                    NumeroTurno = turnoActual,
+                    //New
+                    EstadoParticipacion = EstadoParticipacion.Pendiente
                 });
 
                 turnoActual++;
