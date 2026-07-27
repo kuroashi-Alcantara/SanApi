@@ -246,7 +246,9 @@ namespace SanApi.Controllers
                     PermitirMultiplesTurnos = p.Sala.PermitirMultiplesTurnos,
                     Estado = p.Sala.Estado,
                     FechaInicio = p.Sala.FechaInicio,
-                    FechaCreacion = p.Sala.FechaCreacion
+                    FechaCreacion = p.Sala.FechaCreacion,
+                    MiEstadoParticipacion = (int)p.EstadoParticipacion
+
                 })
                 .ToListAsync();
 
@@ -348,7 +350,7 @@ namespace SanApi.Controllers
                     NombreParticipante = participante.Usuario.NombreCompleto,
                     NumeroTurno = turnoActual,
                     //New
-                    EstadoParticipacion = EstadoParticipacion.Pendiente
+                    EstadoParticipacion = EstadoParticipacion.Activo
                 });
 
                 turnoActual++;
