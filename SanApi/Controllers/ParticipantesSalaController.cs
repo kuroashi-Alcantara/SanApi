@@ -134,7 +134,11 @@ namespace SanApi.Controllers
             // 1. Identificar quién está ejecutando esta acción
             var usuarioLogueadoId = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
 
-            var sala = await _context.Salas.FindAsync(salaId);
+            // 👇 Usamos .Include para traer la lista y evitar el error 500
+            var sala = await _context.Salas
+                .Include(s => s.ParticipantesSalas)
+                .FirstOrDefaultAsync(s => s.Id == salaId);
+
             if (sala == null) return NotFound("La sala no existe.");
 
             // 2. Seguridad: Solo el creador de la sala puede aceptar participantes
@@ -143,9 +147,9 @@ namespace SanApi.Controllers
                 return StatusCode(403, "Solo el creador del San puede aceptar solicitudes.");
             }
 
-            // 3. Buscar la solicitud pendiente
-            var participante = await _context.ParticipantesSala
-                .FirstOrDefaultAsync(p => p.SalaId == salaId && p.UsuarioId == usuarioId);
+            // 3. Buscar la solicitud pendiente dentro de la colección cargada
+            var participante = sala.ParticipantesSalas
+                .FirstOrDefault(p => p.UsuarioId == usuarioId);
 
             if (participante == null)
                 return NotFound("No se encontró la solicitud de este usuario.");
@@ -154,22 +158,28 @@ namespace SanApi.Controllers
                 return BadRequest("Este usuario ya es un participante activo.");
 
             // 4. Validar límite de la sala antes de aceptar
-            var cantidadActual = await _context.ParticipantesSala
-                .CountAsync(p => p.SalaId == salaId && p.EstadoParticipacion == EstadoParticipacion.Activo);
+            var cantidadActual = sala.ParticipantesSalas
+                .Count(p => p.EstadoParticipacion == EstadoParticipacion.Activo);
 
             if (cantidadActual >= sala.CantidadParticipantes)
             {
                 return BadRequest("El San ya está lleno, no puedes aceptar más participantes.");
             }
 
-            // 5. ¡Aceptado! Cambiamos el estado
+            // 5. Asignar automáticamente el siguiente turno disponible
+            // Busca el número más alto actual entre los activos; si no hay turnos, empieza en 0 y le suma 1 (sería el 1), 
+            // o si ya se hizo tómbola y hay 3, este nuevo usuario recibirá el turno 4 de manera automática.
+            int maxTurnoActual = sala.ParticipantesSalas
+                .Where(p => p.EstadoParticipacion == EstadoParticipacion.Activo)
+                .Max(p => (int?)p.NumeroTurno) ?? 0;
+
+            participante.NumeroTurno = maxTurnoActual + 1;
+
+            // 6. ¡Aceptado! Cambiamos el estado
             participante.EstadoParticipacion = EstadoParticipacion.Activo;
 
-            // Nota: Si usas la tómbola para los turnos, dejamos el NumeroTurno en 0.
-            // Si es manual, aquí podrías asignarle el turno correspondiente.
-
             await _context.SaveChangesAsync();
-            return Ok(new { Mensaje = "Participante aceptado exitosamente." });
+            return Ok(new { Mensaje = "Participante aceptado y turno asignado exitosamente." });
         }
 
         // DELETE: api/ParticipantesSala/{salaId}/rechazar/{usuarioId}
@@ -197,6 +207,55 @@ namespace SanApi.Controllers
             await _context.SaveChangesAsync();
 
             return Ok(new { Mensaje = "Solicitud rechazada y eliminada." });
+        }
+
+        // POST: api/ParticipantesSala/{salaId}/asignar-turnos
+        [HttpPost("{salaId}/asignar-turnos")]
+        public async Task<IActionResult> AsignarTurnos(Guid salaId, [FromBody] AsignarTurnosDto dto)
+        {
+            try
+            {
+                // 1. Identificar quién ejecuta la acción desde el Token JWT
+                var usuarioLogueadoId = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+
+                var sala = await _context.Salas
+                    .Include(s => s.ParticipantesSalas)
+                    .FirstOrDefaultAsync(s => s.Id == salaId);
+
+                if (sala == null) return NotFound(new { success = false, mensaje = "La sala no existe." });
+
+                // 2. Seguridad: Solo el creador de la sala puede asignar o cambiar turnos
+                if (sala.CreadorId.ToString() != usuarioLogueadoId)
+                {
+                    return StatusCode(403, new { success = false, mensaje = "Solo el creador del San puede asignar turnos." });
+                }
+
+                // 3. Regla: Solo se permite modificar turnos en fase de Reclutamiento (Estado 1)
+                if ((int)sala.Estado != 1)
+                {
+                    return BadRequest(new { success = false, mensaje = "No se pueden modificar los turnos una vez iniciado el San." });
+                }
+
+                // 4. Actualizamos el número de turno para cada participante
+                foreach (var item in dto.Turnos)
+                {
+                    var participante = sala.ParticipantesSalas
+                        .FirstOrDefault(p => p.UsuarioId == item.UsuarioId);
+
+                    if (participante != null)
+                    {
+                        participante.NumeroTurno = item.NumeroTurno;
+                    }
+                }
+
+                await _context.SaveChangesAsync();
+                return Ok(new { success = true, mensaje = "Turnos asignados correctamente." });
+            }
+            catch (Exception ex)
+            {
+                // 👇 Esto le dirá a tu app exactamente qué línea o valor causó el choque
+                return StatusCode(500, new { success = false, mensaje = $"Error en servidor: {ex.Message} | Inner: {ex.InnerException?.Message}" });
+            }
         }
     }
 }
