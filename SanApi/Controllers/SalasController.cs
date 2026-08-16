@@ -186,10 +186,10 @@ namespace SanApi.Controllers
             return Ok(new { Mensaje = "Sala actualizada correctamente." });
         }
 
-        //nuevos endopoijnt para salas
+        
         // GET: api/Salas/administradas
         [HttpGet("administradas")]
-        public async Task<IActionResult> GetSalasAdministradas()
+        public async Task<IActionResult> GetSalasAdministradas([FromQuery] bool incluirCanceladas = false)
         {
             // 1. Obtenemos el ID del usuario del Token
             var usuarioIdString = User.FindFirst(ClaimTypes.NameIdentifier)?.Value
@@ -198,9 +198,27 @@ namespace SanApi.Controllers
             if (string.IsNullOrEmpty(usuarioIdString) || !Guid.TryParse(usuarioIdString, out Guid usuarioId))
                 return Unauthorized();
 
-            // 2. Filtramos donde él sea el creador
-            var salas = await _context.Salas
-                .Where(s => s.CreadorId == usuarioId)
+            // 2. Armamos la consulta base: Filtramos donde él sea el creador
+            var query = _context.Salas.Where(s => s.CreadorId == usuarioId);
+
+            // 3. Aplicamos el filtro de estado de manera dinámica
+            if (incluirCanceladas)
+            {
+                // Trae las vivas y las del historial (Canceladas y Finalizadas)
+                query = query.Where(s => s.Estado == EstadoSala.Reclutamiento ||
+                                         s.Estado == EstadoSala.EnCurso ||
+                                         s.Estado == EstadoSala.Cancelada ||
+                                         s.Estado == EstadoSala.Finalizada);
+            }
+            else
+            {
+                // Pantalla limpia: Solo trae las vivas
+                query = query.Where(s => s.Estado == EstadoSala.Reclutamiento ||
+                                         s.Estado == EstadoSala.EnCurso);
+            }
+
+            // 4. Mapeamos y ejecutamos
+            var salas = await query
                 .Select(s => new SalaRespuestaDto
                 {
                     Id = s.Id,
@@ -222,7 +240,7 @@ namespace SanApi.Controllers
 
         // GET: api/Salas/participadas
         [HttpGet("participadas")]
-        public async Task<IActionResult> GetSalasParticipadas()
+        public async Task<IActionResult> GetSalasParticipadas([FromQuery] bool incluirCanceladas = false)
         {
             var usuarioIdString = User.FindFirst(ClaimTypes.NameIdentifier)?.Value
                 ?? User.FindFirst(JwtRegisteredClaimNames.Sub)?.Value;
@@ -230,10 +248,28 @@ namespace SanApi.Controllers
             if (string.IsNullOrEmpty(usuarioIdString) || !Guid.TryParse(usuarioIdString, out Guid usuarioId))
                 return Unauthorized();
 
-            // Filtramos usando la tabla intermedia ParticipantesSala
-            var salas = await _context.ParticipantesSala
+            // 1. Consulta base: Filtramos usando la tabla intermedia ParticipantesSala
+            var query = _context.ParticipantesSala
                 .Where(p => p.UsuarioId == usuarioId)
-                .Include(p => p.Sala) // Traemos los datos de la sala
+                .Include(p => p.Sala)
+                .AsQueryable();
+
+            // 2. Filtro dinámico accediendo a las propiedades de p.Sala
+            if (incluirCanceladas)
+            {
+                query = query.Where(p => p.Sala.Estado == EstadoSala.Reclutamiento ||
+                                         p.Sala.Estado == EstadoSala.EnCurso ||
+                                         p.Sala.Estado == EstadoSala.Cancelada ||
+                                         p.Sala.Estado == EstadoSala.Finalizada);
+            }
+            else
+            {
+                query = query.Where(p => p.Sala.Estado == EstadoSala.Reclutamiento ||
+                                         p.Sala.Estado == EstadoSala.EnCurso);
+            }
+
+            // 3. Mapeamos al DTO y ejecutamos
+            var salas = await query
                 .Select(p => new SalaRespuestaDto
                 {
                     Id = p.Sala.Id,
@@ -248,7 +284,6 @@ namespace SanApi.Controllers
                     FechaInicio = p.Sala.FechaInicio,
                     FechaCreacion = p.Sala.FechaCreacion,
                     MiEstadoParticipacion = (int)p.EstadoParticipacion
-
                 })
                 .ToListAsync();
 
@@ -442,5 +477,33 @@ namespace SanApi.Controllers
 
             return Ok(new { Mensaje = "San iniciado exitosamente. Calendario de periodos generado." });
         }
+
+        //Cancelar San
+        [HttpPut("{salaId}/cancelar")]
+        public async Task<IActionResult> CancelarSan(Guid salaId)
+        {
+            var usuarioLogueadoId = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+
+            var sala = await _context.Salas.FirstOrDefaultAsync(s => s.Id == salaId);
+
+            if (sala == null)
+                return NotFound(new { Mensaje = "La sala no existe." });
+
+            // 1. Aislamiento de Permisos: Solo el Organizador puede cancelar el San[cite: 2]
+            if (sala.CreadorId.ToString() != usuarioLogueadoId)
+                return StatusCode(403, new { Mensaje = "Solo el Organizador puede cancelar el San." });
+
+            // 2. Evitar redundancia: Validamos que no esté ya cancelada o finalizada
+            if (sala.Estado == EstadoSala.Cancelada || sala.Estado == EstadoSala.Finalizada)
+                return BadRequest(new { Mensaje = "Este San ya se encuentra archivado." });
+
+            // 3. Soft Delete: Muta el estado a Cancelada (4) preservando el historial
+            sala.Estado = EstadoSala.Cancelada;
+
+            await _context.SaveChangesAsync();
+
+            return Ok(new { Mensaje = "El San ha sido cancelado y archivado exitosamente." });
+        }
     }
+
 }

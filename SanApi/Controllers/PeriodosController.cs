@@ -106,6 +106,8 @@ namespace SanApi.Controllers
             });
         }
 
+
+
         [HttpGet("sala/{salaId}")]
         public async Task<IActionResult> GetPeriodosPorSala(Guid salaId)
         {
