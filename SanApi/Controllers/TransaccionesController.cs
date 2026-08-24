@@ -197,5 +197,34 @@ namespace SanApi.Controllers
 
             return Ok(transacciones);
         }
+
+        //Pago directo
+        [HttpPost("pago-directo")]
+        [Authorize] // Protegemos el endpoint para que solo usuarios logueados entren
+        public async Task<IActionResult> RegistrarPagoDirecto([FromBody] PagoDirectoDto dto)
+        {
+            // 1. Validar que el periodo (turno) realmente existe
+            var periodo = await _context.Periodos.FindAsync(dto.PeriodoId);
+            if (periodo == null)
+            {
+                return NotFound(new { Mensaje = "El turno especificado no existe." });
+            }
+
+            // 2. Crear la transacción con los "Súper Poderes" del Administrador
+            var nuevaTransaccion = new Transaccion
+            {
+                Id = Guid.NewGuid(),
+                PeriodoId = dto.PeriodoId,
+                UsuarioPagadorId = dto.UsuarioPagadorId,
+                Monto = dto.Monto,
+                UrlVoucher = "PAGO_EN_EFECTIVO", // Nuestra marca especial
+                EstadoPago = EstadoPago.Aprobado // ¡Aprobado de inmediato!
+            };
+
+            _context.Transacciones.Add(nuevaTransaccion);
+            await _context.SaveChangesAsync();
+
+            return Ok(new { success = true, mensaje = "Pago en efectivo registrado y aprobado con éxito." });
+        }
     }
 }

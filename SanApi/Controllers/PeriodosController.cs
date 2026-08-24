@@ -20,91 +20,91 @@ namespace SanApi.Controllers
             _context = context;
         }
 
-        [HttpPost("GenerarCalendario/{salaId}")]
-        public async Task<IActionResult> GenerarCalendario(Guid salaId)
-        {
-            var usuarioLogueadoId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+        /* [HttpPost("GenerarCalendario/{salaId}")]
+         public async Task<IActionResult> GenerarCalendario(Guid salaId)
+         {
+             var usuarioLogueadoId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
 
-            // 1. Validar la sala
-            var sala = await _context.Salas.FindAsync(salaId);
-            if (sala == null) return NotFound("La sala no existe.");
+             // 1. Validar la sala
+             var sala = await _context.Salas.FindAsync(salaId);
+             if (sala == null) return NotFound("La sala no existe.");
 
-            // 2. Solo el creador puede iniciar el San
-            if (sala.CreadorId.ToString() != usuarioLogueadoId)
-            {
-                return StatusCode(403, "Solo el creador de la sala puede iniciar el San y generar el calendario.");
-            }
+             // 2. Solo el creador puede iniciar el San
+             if (sala.CreadorId.ToString() != usuarioLogueadoId)
+             {
+                 return StatusCode(403, "Solo el creador de la sala puede iniciar el San y generar el calendario.");
+             }
 
-            // 3. Validar que la sala esté en estado de Reclutamiento
-            if (sala.Estado != EstadoSala.Reclutamiento)
-            {
-                return BadRequest("El calendario ya fue generado o la sala no está en fase de reclutamiento.");
-            }
+             // 3. Validar que la sala esté en estado de Reclutamiento
+             if (sala.Estado != EstadoSala.Reclutamiento)
+             {
+                 return BadRequest("El calendario ya fue generado o la sala no está en fase de reclutamiento.");
+             }
 
-            // 4. Obtener todos los participantes ordenados por turno
-            var participantes = await _context.ParticipantesSala
-                .Where(p => p.SalaId == salaId)
-                .OrderBy(p => p.NumeroTurno)
-                .ToListAsync();
+             // 4. Obtener todos los participantes ordenados por turno
+             var participantes = await _context.ParticipantesSala
+                 .Where(p => p.SalaId == salaId)
+                 .OrderBy(p => p.NumeroTurno)
+                 .ToListAsync();
 
-            if (!participantes.Any())
-            {
-                return BadRequest("No hay participantes inscritos en esta sala.");
-            }
+             if (!participantes.Any())
+             {
+                 return BadRequest("No hay participantes inscritos en esta sala.");
+             }
 
-            // 4.5 AUTO-AJUSTE: Si inicias con menos del límite original, la sala se ajusta automáticamente
-            if (participantes.Count < sala.CantidadParticipantes)
-            {
-                sala.CantidadParticipantes = participantes.Count;
-            }
+             // 4.5 AUTO-AJUSTE: Si inicias con menos del límite original, la sala se ajusta automáticamente
+             if (participantes.Count < sala.CantidadParticipantes)
+             {
+                 sala.CantidadParticipantes = participantes.Count;
+             }
 
-            // 5. Generar el calendario
-            DateTime fechaCalculada = sala.FechaInicio;
-            var periodosNuevos = new List<Periodo>();
-            int rondaActual = 1;
+             // 5. Generar el calendario
+             DateTime fechaCalculada = sala.FechaInicio;
+             var periodosNuevos = new List<Periodo>();
+             int rondaActual = 1;
 
-            foreach (var participante in participantes)
-            {
-                // Calcular la fecha de vencimiento según la frecuencia
-                if (sala.Frecuencia == FrecuenciaSala.Semanal)
-                {
-                    fechaCalculada = fechaCalculada.AddDays(7);
-                }
-                else if (sala.Frecuencia == FrecuenciaSala.Quincenal)
-                {
-                    fechaCalculada = fechaCalculada.AddDays(15);
-                }
-                else if (sala.Frecuencia == FrecuenciaSala.Mensual)
-                {
-                    fechaCalculada = fechaCalculada.AddMonths(1);
-                }
+             foreach (var participante in participantes)
+             {
+                 // Calcular la fecha de vencimiento según la frecuencia
+                 if (sala.Frecuencia == FrecuenciaSala.Semanal)
+                 {
+                     fechaCalculada = fechaCalculada.AddDays(7);
+                 }
+                 else if (sala.Frecuencia == FrecuenciaSala.Quincenal)
+                 {
+                     fechaCalculada = fechaCalculada.AddDays(15);
+                 }
+                 else if (sala.Frecuencia == FrecuenciaSala.Mensual)
+                 {
+                     fechaCalculada = fechaCalculada.AddMonths(1);
+                 }
 
-                var nuevoPeriodo = new Periodo
-                {
-                    SalaId = sala.Id,
-                    NumeroRonda = rondaActual,
-                    FechaVencimiento = fechaCalculada,
-                    BeneficiarioId = participante.UsuarioId,
-                    EstadoPeriodo = EstadoPeriodo.Pendiente
-                };
+                 var nuevoPeriodo = new Periodo
+                 {
+                     SalaId = sala.Id,
+                     NumeroRonda = rondaActual,
+                     FechaVencimiento = fechaCalculada,
+                     BeneficiarioId = participante.UsuarioId,
+                     EstadoPeriodo = EstadoPeriodo.Pendiente
+                 };
 
-                periodosNuevos.Add(nuevoPeriodo);
-                rondaActual++;
-            }
+                 periodosNuevos.Add(nuevoPeriodo);
+                 rondaActual++;
+             }
 
-            // 6. Guardar los periodos y cambiar el estado de la sala a "EnCurso"
-            _context.Periodos.AddRange(periodosNuevos);
-            sala.Estado = EstadoSala.EnCurso;
+             // 6. Guardar los periodos y cambiar el estado de la sala a "EnCurso"
+             _context.Periodos.AddRange(periodosNuevos);
+             sala.Estado = EstadoSala.EnCurso;
 
-            await _context.SaveChangesAsync();
+             await _context.SaveChangesAsync();
 
-            return Ok(new
-            {
-                Mensaje = "Calendario generado exitosamente y San iniciado.",
-                TotalRondas = periodosNuevos.Count,
-                ParticipantesFinales = sala.CantidadParticipantes
-            });
-        }
+             return Ok(new
+             {
+                 Mensaje = "Calendario generado exitosamente y San iniciado.",
+                 TotalRondas = periodosNuevos.Count,
+                 ParticipantesFinales = sala.CantidadParticipantes
+             });
+         }*/
 
 
 
@@ -118,7 +118,7 @@ namespace SanApi.Controllers
                 return NotFound("La sala especificada no existe.");
             }
 
-            // 2. Buscar los periodos de esa sala ordenados por número de ronda
+            // 2. Buscar los periodos de esa sala y extraer el nombre del usuario
             var periodos = await _context.Periodos
                 .Where(p => p.SalaId == salaId)
                 .OrderBy(p => p.NumeroRonda)
@@ -129,6 +129,8 @@ namespace SanApi.Controllers
                     NumeroRonda = p.NumeroRonda,
                     FechaVencimiento = p.FechaVencimiento,
                     BeneficiarioId = p.BeneficiarioId,
+                    // NAVEGAMOS A LA TABLA USUARIO Y SACAMOS SU NOMBRE
+                    BeneficiarioNombre = p.Beneficiario.NombreCompleto,
                     EstadoPeriodo = p.EstadoPeriodo,
                     FechaDesembolso = p.FechaDesembolso
                 })
@@ -138,7 +140,7 @@ namespace SanApi.Controllers
             return Ok(periodos);
         }
 
-        [HttpPut("Desembolsar/{id}")]
+        /*[HttpPut("Desembolsar/{id}")]
         public async Task<IActionResult> RegistrarDesembolso(Guid id, [FromBody] DesembolsarPeriodoDto dto)
         {
             var usuarioLogueadoId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
@@ -197,6 +199,45 @@ namespace SanApi.Controllers
                 UrlComprobante = periodo.UrlComprobanteDesembolso,
                 EstadoActual = periodo.EstadoPeriodo
             });
+        }*/
+
+        [HttpPost("{periodoId}/finalizar")]
+        [Authorize]
+        public async Task<IActionResult> FinalizarPeriodo(Guid periodoId)
+        {
+            // 1. Buscamos el periodo y usamos tu propiedad de navegación real: ParticipantesSalas
+            var periodo = await _context.Periodos
+                .Include(p => p.Sala)
+                .ThenInclude(s => s.ParticipantesSalas) 
+                .FirstOrDefaultAsync(p => p.Id == periodoId);
+
+            if (periodo == null) return NotFound(new { Mensaje = "Turno no encontrado." });
+
+            // 2. Contamos cuántos deben pagar (Participantes Activos)
+            int totalActivos = periodo.Sala.ParticipantesSalas.Count(p => (int)p.EstadoParticipacion == 1);
+
+            // 3. LA SOLUCIÓN: Contamos cuántos usuarios ÚNICOS tienen al menos un pago APROBADO
+            int pagosAprobados = await _context.Transacciones
+                .Where(t => t.PeriodoId == periodoId && t.EstadoPago == EstadoPago.Aprobado)
+                .Select(t => t.UsuarioPagadorId)
+                .Distinct() // Esto ignora los duplicados de las pruebas de pago
+                .CountAsync();
+
+            // 4. La regla de oro
+            if (pagosAprobados < totalActivos)
+            {
+                return BadRequest(new
+                {
+                    success = false,
+                    mensaje = $"Faltan pagos por cobrar. Solo tienes {pagosAprobados} de {totalActivos} pagos aprobados."
+                });
+            }
+
+            // 5. Todo cuadra, cerramos el turno (Estado 2 = Completado)
+            periodo.EstadoPeriodo = EstadoPeriodo.Completado; 
+            await _context.SaveChangesAsync();
+
+            return Ok(new { success = true, mensaje = "¡Dinero desembolsado y turno finalizado correctamente!" });
         }
     }
 }

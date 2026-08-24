@@ -30,9 +30,7 @@ namespace SanApi.Modelos
         // ¿Puede una persona comprar más de un número/turno?
         public bool PermitirMultiplesTurnos { get; set; } = false;
 
-        // ==========================================================
-        // NUEVAS REGLAS DE NEGOCIO (CONFIGURACIÓN DEL ORGANIZADOR)
-        // ==========================================================
+        
 
         // Determina si el sistema hace una tómbola o si el organizador asigna a mano
         public bool SorteoTurnosAleatorio { get; set; } = true;

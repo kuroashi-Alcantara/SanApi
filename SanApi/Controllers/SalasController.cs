@@ -408,22 +408,20 @@ namespace SanApi.Controllers
             var usuarioLogueadoId = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
 
             var sala = await _context.Salas
-                // Nota el cambio aquí: Usamos tu propiedad exacta ParticipantesSalas
                 .Include(s => s.ParticipantesSalas)
                 .FirstOrDefaultAsync(s => s.Id == salaId);
 
             if (sala == null) return NotFound("La sala no existe.");
 
-            // 1. Autoridad de Inicio: Solo el Organizador puede detonar la creación del calendario[cite: 1].
+            // 1. Autoridad de Inicio
             if (sala.CreadorId.ToString() != usuarioLogueadoId)
                 return StatusCode(403, "Solo el Organizador puede detonar la creación del calendario.");
 
-            // 2. Validación de Estado: La sala debe estar obligatoriamente en fase de Reclutamiento[cite: 1].
+            // 2. Validación de Estado
             if (sala.Estado != EstadoSala.Reclutamiento)
                 return BadRequest("La sala debe estar obligatoriamente en fase de Reclutamiento para iniciar.");
 
-            // 3. Restricción de Quórum: El sistema abortará la generación si no hay participantes inscritos[cite: 1].
-            // (Asegúrate de que EstadoParticipacion siga siendo tu Enum para los miembros)
+            // 3. Obtener participantes activos y ordenados
             var activos = sala.ParticipantesSalas
                 .Where(p => p.EstadoParticipacion == EstadoParticipacion.Activo)
                 .OrderBy(p => p.NumeroTurno)
@@ -432,28 +430,27 @@ namespace SanApi.Controllers
             if (!activos.Any())
                 return BadRequest("El sistema abortará la generación si no hay participantes inscritos.");
 
-            // 4. Auto-Ajuste Inteligente: El sistema muta automáticamente la capacidad de la sala para igualarla a los participantes actuales[cite: 1].
+            // 4. Auto-Ajuste Inteligente de capacidad
             sala.CantidadParticipantes = activos.Count;
 
-            // 5. Proyección Cronológica: El sistema crea un Periodo por cada participante activo, asignando a cada uno como BeneficiarioId[cite: 1].
+            // 5. FABRICACIÓN DEL CALENDARIO (Solo Periodos)
             DateTime fechaCalculada = sala.FechaInicio;
             var periodosNuevos = new List<Periodo>();
 
-            foreach (var participante in activos)
+            foreach (var beneficiario in activos)
             {
                 var nuevoPeriodo = new Periodo
                 {
                     Id = Guid.NewGuid(),
                     SalaId = sala.Id,
-                    BeneficiarioId = participante.UsuarioId,
-                    NumeroRonda = participante.NumeroTurno,
+                    BeneficiarioId = beneficiario.UsuarioId,
+                    NumeroRonda = beneficiario.NumeroTurno,
                     FechaVencimiento = fechaCalculada,
-                    EstadoPeriodo = EstadoPeriodo.Pendiente // Nace con el estado Pendiente desde tu Enum
+                    EstadoPeriodo = EstadoPeriodo.Pendiente
                 };
-
                 periodosNuevos.Add(nuevoPeriodo);
 
-                // La fecha de vencimiento se calcula iterativamente sumando el intervalo de la Frecuencia a la FechaInicio de la sala[cite: 1].
+                // Calculamos la fecha para la SIGUIENTE ronda
                 switch (sala.Frecuencia)
                 {
                     case FrecuenciaSala.Semanal:
@@ -470,12 +467,16 @@ namespace SanApi.Controllers
 
             _context.Periodos.AddRange(periodosNuevos);
 
-            // 6. Transición de Estado: Una vez generado el calendario, el estado de la sala cambia permanentemente a EnCurso[cite: 1].
+            // 6. Transición de Estado de la Sala
             sala.Estado = EstadoSala.EnCurso;
 
             await _context.SaveChangesAsync();
 
-            return Ok(new { Mensaje = "San iniciado exitosamente. Calendario de periodos generado." });
+            return Ok(new
+            {
+                Mensaje = "San iniciado exitosamente. Calendario generado.",
+                TotalRondas = periodosNuevos.Count
+            });
         }
 
         //Cancelar San

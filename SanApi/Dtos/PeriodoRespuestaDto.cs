@@ -12,5 +12,7 @@ namespace SanApi.Dtos
         public EstadoPeriodo EstadoPeriodo { get; set; }
         public string UrlComprobanteDesembolso { get; set; } = string.Empty;
         public DateTime? FechaDesembolso { get; set; }
+
+        public string BeneficiarioNombre { get; set; } = string.Empty;
     }
 }
